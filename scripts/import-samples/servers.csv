@@ -1,0 +1,5 @@
+hostname,private_ip,public_ip,env,business_line_code,region,zone,os_type,server_type,spec,owner_username,deployed_app_codes,deployment_role,agent_install_status,agent_version,agent_status,last_heartbeat_at,metric_data_source,log_collector,access_status,business_health_status,tags,gaps
+app-prod-01,10.0.1.10,,prod,logistics,shanghai,shanghai-a,Linux 7.9,vm,8C16G,sre001,ACE,app,installed,1.0.0,normal,2026-04-28T10:01:00+08:00,prometheus-prod,Filebeat,connected,normal,"core;java",
+app-prod-02,10.0.1.11,,prod,logistics,shanghai,shanghai-b,Linux 7.9,vm,8C16G,sre001,ACE,app,installed,0.9.0,version_low,2026-04-28T09:30:00+08:00,prometheus-prod,Filebeat,partial_connected,unknown,"core;java",Agent version needs upgrade
+ipro-prod-01,10.0.1.20,,prod,commerce,shanghai,shanghai-a,Linux 7.9,vm,8C16G,sre001,IPRO,app,installed,1.0.0,normal,2026-04-28T09:58:00+08:00,prometheus-prod,Filebeat,verifying,unknown,"core;java",Waiting for log source credentials
+cms-prod-01,10.0.1.30,,prod,content,shanghai,shanghai-a,Linux 7.9,vm,4C8G,sre001,CMS,app,installed,1.0.0,normal,2026-04-28T10:03:00+08:00,prometheus-prod,Filebeat,connected,normal,"content;java",

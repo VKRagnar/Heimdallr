@@ -1,0 +1,177 @@
+html,
+body,
+#root {
+  width: 100%;
+  min-width: 1024px;
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  color: #1f2937;
+  background: #f5f7fb;
+}
+
+.app-shell {
+  min-height: 100vh;
+}
+
+.app-sider {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow: auto;
+  background: #101828 !important;
+}
+
+.brand {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  height: 64px;
+  padding: 0 18px;
+  color: #ffffff;
+  border-bottom: 1px solid rgb(255 255 255 / 8%);
+}
+
+.brand .ant-typography {
+  display: block;
+  color: #ffffff;
+  line-height: 20px;
+}
+
+.brand .ant-typography-secondary {
+  color: rgb(255 255 255 / 58%) !important;
+  font-size: 12px;
+}
+
+.brand-mark {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  font-weight: 700;
+  color: #ffffff;
+  background: #1677ff;
+  border-radius: 6px;
+}
+
+.app-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 56px;
+  padding: 0 24px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.env-select {
+  width: 132px;
+}
+
+.user-meta {
+  display: flex;
+  flex-direction: column;
+  line-height: 18px;
+}
+
+.app-content {
+  padding: 24px;
+}
+
+.page-header {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.page-header h3.ant-typography {
+  margin: 6px 0 2px;
+}
+
+.page-header-extra {
+  flex: 0 0 auto;
+}
+
+.source-bar {
+  margin-bottom: 16px;
+}
+
+.filter-bar {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+}
+
+.filter-bar .ant-input {
+  width: 240px;
+}
+
+.filter-select {
+  width: 160px;
+}
+
+.filter-extra {
+  flex: 0 0 auto;
+}
+
+.page-stack {
+  width: 100%;
+}
+
+.state-block {
+  display: grid;
+  min-height: 280px;
+  place-items: center;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+}
+
+.state-result {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+}
+
+.ant-card,
+.ant-table-wrapper {
+  border-radius: 6px;
+}
+
+@media (max-width: 768px) {
+  html,
+  body,
+  #root {
+    min-width: 0;
+  }
+
+  .app-sider {
+    display: none;
+  }
+
+  .app-header {
+    padding: 0 12px;
+  }
+
+  .app-content {
+    padding: 16px;
+  }
+
+  .filter-bar,
+  .page-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}

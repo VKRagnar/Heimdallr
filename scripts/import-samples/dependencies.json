@@ -1,0 +1,79 @@
+{
+  "version": "sprint1-sample",
+  "capturedAt": "2026-04-28T10:00:00+08:00",
+  "items": [
+    {
+      "objectType": "kafka",
+      "objectCode": "kafka-prod-01",
+      "objectName": "Production Kafka Cluster",
+      "env": "prod",
+      "businessLineCode": "shared",
+      "ownerTeam": "SRE",
+      "brokerList": ["kafka-01:9092", "kafka-02:9092", "kafka-03:9092"],
+      "metricDataSource": "prometheus-prod",
+      "accessStatus": "verifying",
+      "dependencies": [
+        {
+          "topic": "order_created",
+          "consumerGroup": "ace-order-consumer",
+          "applicationCode": "ACE",
+          "direction": "consume",
+          "critical": true,
+          "defaultRuleCandidates": ["lag_gt_1000_for_10m", "consume_rate_zero_for_5m"]
+        },
+        {
+          "topic": "content_publish",
+          "consumerGroup": "cms-publish-consumer",
+          "applicationCode": "CMS",
+          "direction": "consume",
+          "critical": false,
+          "defaultRuleCandidates": ["lag_gt_5000_for_10m"]
+        }
+      ]
+    },
+    {
+      "objectType": "postgresql",
+      "objectCode": "pg-ace-prod",
+      "objectName": "ACE Production Database",
+      "env": "prod",
+      "businessLineCode": "logistics",
+      "ownerTeam": "DBA",
+      "endpointRef": "10.0.2.10:5432",
+      "databaseName": "ace_db",
+      "role": "primary",
+      "collectorAccount": "monitor_ro",
+      "secretRef": "secret/pg-ace-prod",
+      "exporterType": "PostgreSQL Exporter",
+      "metricDataSource": "prometheus-prod",
+      "applicationCodes": ["ACE"],
+      "shared": false,
+      "sensitivePolicy": "default-mask",
+      "permissionScope": "application_scoped",
+      "accessStatus": "verifying",
+      "defaultRuleCandidates": ["up_eq_0_for_1m", "connection_usage_gt_90", "lock_wait_gt_60s"],
+      "gaps": ["Slow SQL threshold requires business confirmation"]
+    },
+    {
+      "objectType": "postgresql",
+      "objectCode": "pg-commerce-prod",
+      "objectName": "Commerce Shared Database",
+      "env": "prod",
+      "businessLineCode": "shared",
+      "ownerTeam": "DBA",
+      "endpointRef": "10.0.2.20:5432",
+      "databaseName": "ipro_db",
+      "role": "primary",
+      "collectorAccount": "monitor_ro",
+      "secretRef": "secret/pg-commerce-prod",
+      "exporterType": "PostgreSQL Exporter",
+      "metricDataSource": "prometheus-prod",
+      "applicationCodes": ["IPRO"],
+      "shared": true,
+      "sensitivePolicy": "default-mask",
+      "permissionScope": "application_scoped",
+      "accessStatus": "not_connected",
+      "defaultRuleCandidates": ["up_eq_0_for_1m", "connection_usage_gt_90"],
+      "gaps": ["Collector account not ready"]
+    }
+  ]
+}
