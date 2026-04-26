@@ -7,6 +7,7 @@
 | `architecture-prerequisites.md` | 产品原型阶段收敛的技术架构前置决策 |
 | `information-architecture.md` | 信息架构、页面层级、核心对象关系、任务路径和权限可见性 |
 | `technical-architecture-design.md` | 技术架构设计主文档，覆盖总体架构、领域模型、数据存储、接入、告警、通知、权限、审计和演进边界 |
+| `technology-selection.md` | 技术栈梳理与初步技术选型，明确前端、后端、存储、观测、任务和部署建议 |
 | `detailed-design/` | 技术架构之后的详细设计产物目录 |
 
 ## 2. 当前阶段结论
