@@ -1,0 +1,472 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>配置管理链路高保真设计稿</title>
+    <link rel="stylesheet" href="./config-pages.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <span class="brand-mark">UM</span>
+          <span>统一监控平台</span>
+        </div>
+        <nav class="nav-list">
+          <a>首页总览</a>
+          <a>应用监控</a>
+          <a>服务器监控</a>
+          <a>日志中心</a>
+          <a>指标中心</a>
+          <a class="active">告警中心</a>
+          <a>通知与值班</a>
+          <a>接入管理</a>
+          <a>系统管理</a>
+        </nav>
+      </aside>
+
+      <main class="workspace">
+        <header class="topbar">
+          <div class="global-search">搜索应用、服务器、告警 ID、Trace ID</div>
+          <div class="top-actions">
+            <span class="env-tag">生产</span>
+            <span>自动刷新 30s</span>
+            <span>通知 12</span>
+            <span>平台管理员</span>
+          </div>
+        </header>
+
+        <div class="page-canvas">
+          <section class="board hero-board" id="overview">
+            <div>
+              <div class="breadcrumb">设计稿 / 配置管理链路</div>
+              <h1>企业级统一监控平台 - 配置管理链路</h1>
+              <p>覆盖告警规则、规则表单抽屉、值班组与联系人、通知渠道、用户权限与应用授权、应用接入与数据源管理。页面保持高密度后台工作台风格，所有高风险变更展示审计和二次确认。</p>
+            </div>
+            <div class="hero-summary">
+              <div><b>6</b><span>配置画板</span></div>
+              <div><b>18</b><span>关键状态</span></div>
+              <div><b>100%</b><span>本地静态</span></div>
+            </div>
+          </section>
+
+          <section class="board" id="alert-rules">
+            <div class="page-head">
+              <div>
+                <div class="breadcrumb">告警中心 / 告警规则</div>
+                <div class="title-row">
+                  <h2>告警规则</h2>
+                  <span class="badge info">规则检测中</span>
+                </div>
+                <p>配置简单阈值规则、通知对象和值班组，规则启用后参与告警检测。</p>
+              </div>
+              <div class="action-row">
+                <button class="btn secondary">批量启用</button>
+                <button class="btn secondary">批量停用</button>
+                <button class="btn primary">新建规则</button>
+              </div>
+            </div>
+
+            <div class="filter-bar">
+              <label>关键字<input value="error_rate" /></label>
+              <label>环境<select><option>生产</option></select></label>
+              <label>对象类型<select><option>应用</option></select></label>
+              <label>应用<select><option>order-api</option></select></label>
+              <label>告警级别<select><option>P0 / P1 / P2</option></select></label>
+              <label>状态<select><option>启用、配置异常</option></select></label>
+              <button class="btn primary compact">查询</button>
+              <button class="btn secondary compact">重置</button>
+            </div>
+
+            <div class="metric-strip">
+              <div><span>全部</span><b>128</b></div>
+              <div><span>启用</span><b>96</b></div>
+              <div><span>停用</span><b>14</b></div>
+              <div><span>草稿</span><b>9</b></div>
+              <div class="risk"><span>配置异常</span><b>6</b></div>
+              <div class="warn"><span>无指标数据</span><b>3</b></div>
+            </div>
+
+            <div class="table-card">
+              <table>
+                <thead>
+                  <tr>
+                    <th>规则名称</th>
+                    <th>对象</th>
+                    <th>指标</th>
+                    <th>触发条件</th>
+                    <th>级别</th>
+                    <th>通知对象</th>
+                    <th>渠道</th>
+                    <th>状态</th>
+                    <th>最近触发</th>
+                    <th>操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr class="row-critical">
+                    <td><b>订单错误率过高</b><small>RULE-20260426-008</small></td>
+                    <td>order-api<small>应用 / 交易业务线</small></td>
+                    <td>错误率<small>error_rate / Prometheus</small></td>
+                    <td>平均值 &gt; 5%，持续 5 分钟</td>
+                    <td><span class="badge p1">P1 严重</span></td>
+                    <td>负责人 + 交易值班组<small>当前：周敏 / 下一：陈启</small></td>
+                    <td><span class="mini-chip">短信</span><span class="mini-chip">企微</span></td>
+                    <td><span class="badge ok">启用</span></td>
+                    <td>10:31:20</td>
+                    <td class="ops">查看 编辑 复制 停用 审计</td>
+                  </tr>
+                  <tr>
+                    <td><b>支付接口 P99 延迟</b><small>RULE-20260425-031</small></td>
+                    <td>payment-api<small>应用 / 支付业务线</small></td>
+                    <td>P99 延迟<small>http_server_p99 / Grafana</small></td>
+                    <td>最大值 &gt; 800ms，持续 3 分钟</td>
+                    <td><span class="badge p0">P0 紧急</span></td>
+                    <td>负责人 + 支付值班组</td>
+                    <td><span class="mini-chip">电话</span><span class="mini-chip">短信</span><span class="mini-chip">+1</span></td>
+                    <td><span class="badge error">配置异常</span><small>值班组排班缺失</small></td>
+                    <td>09:42:11</td>
+                    <td class="ops">查看 编辑 触发记录 审计</td>
+                  </tr>
+                  <tr>
+                    <td><b>库存服务 CPU 使用率</b><small>RULE-20260420-019</small></td>
+                    <td>stock-service<small>应用 / 供应链</small></td>
+                    <td>CPU 使用率<small>node_cpu_usage / Prometheus</small></td>
+                    <td>平均值 &gt; 85%，持续 10 分钟</td>
+                    <td><span class="badge p2">P2 一般</span></td>
+                    <td>应用负责人</td>
+                    <td><span class="mini-chip">邮件</span><span class="mini-chip">企微</span></td>
+                    <td><span class="badge warning">无指标数据</span></td>
+                    <td>-</td>
+                    <td class="ops">查看 编辑 启用 审计</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="board drawer-board" id="rule-drawer">
+            <div class="page-head tight">
+              <div>
+                <div class="breadcrumb">告警规则 / 新建规则抽屉</div>
+                <h2>规则表单抽屉：简单阈值规则</h2>
+              </div>
+              <span class="badge restricted">复杂配置宽度 960px</span>
+            </div>
+
+            <div class="drawer-mock wide">
+              <div class="drawer-header">
+                <div>
+                  <h3>新建告警规则</h3>
+                  <p>order-api / 生产 / 最近更新于 2026-04-26 10:31:20</p>
+                </div>
+                <span class="badge warning">可保存草稿，启用受阻</span>
+              </div>
+
+              <div class="drawer-content two-col">
+                <div class="form-section">
+                  <h4>基本信息</h4>
+                  <div class="form-grid">
+                    <label>规则名称<input value="订单错误率过高" /></label>
+                    <label>启用状态<select><option>启用</option></select></label>
+                  </div>
+                  <label>规则描述<textarea>订单核心接口 5 分钟平均错误率超过阈值时触发。</textarea></label>
+                </div>
+
+                <div class="form-section">
+                  <h4>监控对象</h4>
+                  <div class="form-grid">
+                    <label>对象类型<select><option>应用</option></select></label>
+                    <label>环境<select><option>生产</option></select></label>
+                    <label>监控对象<select><option>order-api</option></select></label>
+                    <label>对象范围<select><option>全部生产实例</option></select></label>
+                  </div>
+                  <div class="notice info">对象选择器仅返回授权应用；未授权应用不会出现在搜索结果中。</div>
+                </div>
+
+                <div class="form-section">
+                  <h4>指标条件</h4>
+                  <div class="form-grid">
+                    <label>指标来源<select><option>Prometheus</option></select></label>
+                    <label>指标<select><option>error_rate</option></select></label>
+                    <label>聚合方式<select><option>平均值</option></select></label>
+                    <label>触发条件<select><option>大于</option></select></label>
+                    <label>阈值<input value="5" /></label>
+                    <label>持续时间<input value="5 分钟" /></label>
+                    <label>检测周期<input value="1 分钟" /></label>
+                  </div>
+                  <div class="field-error">阈值为百分比指标，范围需在 0-100。</div>
+                </div>
+
+                <div class="form-section">
+                  <h4>告警策略</h4>
+                  <div class="form-grid">
+                    <label>告警级别<select><option>P1 严重</option></select></label>
+                    <label>生效时间<select><option>全天</option></select></label>
+                    <label>恢复条件<select><option>恢复到 5% 及以下</option></select></label>
+                    <label>重复通知间隔<select><option>15 分钟</option></select></label>
+                  </div>
+                </div>
+
+                <div class="form-section span-2">
+                  <h4>通知配置和值班组选择器</h4>
+                  <div class="selector-layout">
+                    <div class="selector-list">
+                      <div class="selector-toolbar">
+                        <input value="交易系统" />
+                        <select><option>覆盖当前应用</option></select>
+                      </div>
+                      <div class="duty-card selected">
+                        <div><b>交易系统值班组</b><span class="badge ok">正常</span></div>
+                        <p>覆盖应用 12 个 / 当前值班人 周敏 / 下一值班人 陈启 / 引用规则 24</p>
+                        <small>联系方式完整：短信、电话、企业微信可用</small>
+                      </div>
+                      <div class="duty-card disabled">
+                        <div><b>支付核心值班组</b><span class="badge error">排班缺失</span></div>
+                        <p>覆盖应用 8 个 / 当前时间无法解析值班人 / 引用规则 17</p>
+                        <small>不可保存并启用，可保存草稿后补全排班</small>
+                      </div>
+                    </div>
+                    <div class="preview-panel">
+                      <h4>规则预览</h4>
+                      <p>当生产环境 order-api 的 error_rate 在 5 分钟内平均值持续大于 5% 时，触发 P1 严重告警；每 1 分钟检测一次；通知应用负责人张三、备份负责人李四和交易系统值班组，通过短信、企业微信发送。</p>
+                      <div class="notice warning">P1 必须包含短信或 IM；当前渠道满足要求。</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="form-section span-2">
+                  <h4>处理建议</h4>
+                  <textarea>先查看最近 30 分钟 ERROR 日志和发布事件，确认是否为订单创建链路异常。</textarea>
+                </div>
+              </div>
+
+              <div class="drawer-footer">
+                <div class="audit-note">本次变更将记录操作人、操作时间、变更前后内容，并可在系统管理 / 操作审计中查询。</div>
+                <div class="action-row">
+                  <button class="btn secondary">取消</button>
+                  <button class="btn secondary">保存草稿</button>
+                  <button class="btn secondary">规则预览</button>
+                  <button class="btn primary disabled">保存并启用</button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="board split-board" id="duty-contact">
+            <div class="page-head">
+              <div>
+                <div class="breadcrumb">通知与值班 / 联系人与值班组</div>
+                <h2>值班组 / 联系人</h2>
+                <p>维护告警通知对象基础联系方式，值班组按告警触发时间动态解析接收人。</p>
+              </div>
+              <div class="action-row">
+                <button class="btn secondary">批量导入</button>
+                <button class="btn primary">新建值班组</button>
+              </div>
+            </div>
+
+            <div class="columns">
+              <div class="panel">
+                <div class="panel-head">
+                  <h3>联系人</h3>
+                  <span class="badge restricted">默认脱敏</span>
+                </div>
+                <table>
+                  <thead><tr><th>姓名</th><th>手机号</th><th>邮箱</th><th>渠道完整性</th><th>操作</th></tr></thead>
+                  <tbody>
+                    <tr><td>周敏<small>zhoumin</small></td><td>138****0912</td><td>zhou***@corp.com</td><td><span class="badge ok">完整</span></td><td class="ops">编辑 测试 审计</td></tr>
+                    <tr><td>陈启<small>chenqi</small></td><td>136****2201</td><td>chen***@corp.com</td><td><span class="badge warning">缺电话</span></td><td class="ops">编辑 测试 审计</td></tr>
+                    <tr><td>刘洋<small>liuyang</small></td><td>-</td><td>liu***@corp.com</td><td><span class="badge error">缺手机号</span></td><td class="ops">编辑 禁用 审计</td></tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <div class="panel">
+                <div class="panel-head">
+                  <h3>值班组</h3>
+                  <span class="badge info">触发时间解析</span>
+                </div>
+                <table>
+                  <thead><tr><th>值班组</th><th>覆盖应用</th><th>当前值班人</th><th>规则数</th><th>状态</th></tr></thead>
+                  <tbody>
+                    <tr><td>交易系统值班组<small>负责人：张三</small></td><td>12</td><td>周敏<small>下一：陈启</small></td><td>24</td><td><span class="badge ok">正常</span></td></tr>
+                    <tr><td>支付核心值班组<small>负责人：王莹</small></td><td>8</td><td>-</td><td>17</td><td><span class="badge error">排班缺失</span></td></tr>
+                    <tr><td>会员业务值班组<small>负责人：赵明</small></td><td>6</td><td>刘洋</td><td>9</td><td><span class="badge warning">联系方式缺失</span></td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="confirm-card">
+              <h3>危险操作确认：停用被引用值班组</h3>
+              <p>停用后，绑定该值班组的规则将进入配置异常，不再解析当前值班人。影响 17 条规则，其中 P0/P1 规则 5 条，生产应用 8 个。</p>
+              <div class="confirm-grid">
+                <span>影响规则：RULE-20260425-031 等 17 条</span>
+                <span>影响应用：payment-api、pay-gateway 等</span>
+                <span>审计事件：duty_group_disable</span>
+                <span>确认结果：confirmed / cancelled</span>
+              </div>
+              <div class="action-row"><button class="btn secondary">取消</button><button class="btn danger">确认停用</button></div>
+            </div>
+          </section>
+
+          <section class="board" id="channels">
+            <div class="page-head">
+              <div>
+                <div class="breadcrumb">通知与值班 / 通知渠道</div>
+                <h2>通知渠道</h2>
+                <p>配置邮件、短信、IM、电话和 Webhook 等告警触达通道。</p>
+              </div>
+              <div class="action-row">
+                <button class="btn secondary">测试全部</button>
+                <button class="btn primary">新增渠道</button>
+              </div>
+            </div>
+            <div class="table-card">
+              <table>
+                <thead><tr><th>渠道名称</th><th>类型</th><th>适用级别</th><th>状态</th><th>最近测试</th><th>成功率</th><th>失败原因</th><th>引用规则</th><th>操作</th></tr></thead>
+                <tbody>
+                  <tr><td>生产短信通道<small>CH-SMS-PROD</small></td><td>短信</td><td><span class="badge p0">P0</span><span class="badge p1">P1</span></td><td><span class="badge ok">启用</span></td><td>成功 / 10:12</td><td>99.2%</td><td>-</td><td>86</td><td class="ops">编辑 测试 审计</td></tr>
+                  <tr><td>交易企业微信机器人<small>CH-WX-TRADE</small></td><td>企业微信</td><td><span class="badge p1">P1</span><span class="badge p2">P2</span></td><td><span class="badge error">异常</span></td><td>失败 / 10:29</td><td>83.4%</td><td>签名校验失败</td><td>42</td><td class="ops">编辑 测试 通知记录 审计</td></tr>
+                  <tr><td>Webhook 通用回调<small>CH-WEBHOOK-OPS</small></td><td>Webhook</td><td><span class="badge p2">P2</span><span class="badge p3">P3</span></td><td><span class="badge info">测试中</span></td><td>验证中</td><td>-</td><td>等待 2xx 响应</td><td>12</td><td class="ops">编辑 停用 审计</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="drawer-mock narrow inline-drawer">
+              <div class="drawer-header"><h3>编辑渠道：交易企业微信机器人</h3><span class="badge restricted">Secret 已脱敏</span></div>
+              <div class="drawer-content">
+                <div class="form-section">
+                  <h4>发送配置</h4>
+                  <div class="form-grid">
+                    <label>Webhook URL<input value="https://qyapi.weixin.qq.com/cgi-bin/webhook/******" /></label>
+                    <label>签名密钥<input value="******" /></label>
+                    <label>重试次数<input value="3" /></label>
+                    <label>超时时间<input value="5 秒" /></label>
+                  </div>
+                  <div class="notice error">查看密钥明文需要敏感权限，确认后写入 audit_secret_view。</div>
+                </div>
+              </div>
+              <div class="drawer-footer"><div class="audit-note">密钥更新、状态变更、测试发送结果均记录审计。</div><button class="btn secondary">测试连接</button><button class="btn primary">保存</button></div>
+            </div>
+          </section>
+
+          <section class="board" id="permissions">
+            <div class="page-head">
+              <div>
+                <div class="breadcrumb">系统管理 / 用户管理 / 配置权限</div>
+                <h2>用户权限 / 应用授权</h2>
+                <p>维护用户角色、菜单权限、操作权限和应用数据权限，授权范围自动衍生日志、指标、告警与关联服务器。</p>
+              </div>
+              <button class="btn primary">同步用户</button>
+            </div>
+
+            <div class="permission-layout">
+              <div class="panel">
+                <div class="panel-head"><h3>用户列表</h3><span class="badge ok">已同步 326</span></div>
+                <table>
+                  <thead><tr><th>用户名</th><th>角色</th><th>授权应用</th><th>状态</th><th>操作</th></tr></thead>
+                  <tbody>
+                    <tr><td>zhangsan<small>张三 / U-0019</small></td><td><span class="mini-chip">应用负责人</span><span class="mini-chip">值班人员</span></td><td>order-api 等 8 个</td><td><span class="badge ok">启用</span></td><td class="ops">配置权限 审计</td></tr>
+                    <tr><td>ops_admin<small>平台管理员 / U-0001</small></td><td><span class="badge info">平台管理员</span></td><td>全部应用</td><td><span class="badge ok">启用</span></td><td class="ops">配置权限 禁用 审计</td></tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <div class="auth-selector">
+                <div class="selector-head">
+                  <h3>应用授权选择器</h3>
+                  <span class="badge warning">生产权限需确认</span>
+                </div>
+                <div class="auth-columns">
+                  <div class="auth-filter">
+                    <label>业务线<select><option>交易业务线</option></select></label>
+                    <label>环境<select><option>生产、预发</option></select></label>
+                    <label>接入状态<select><option>已接入、仅日志、未接入</option></select></label>
+                    <button class="btn secondary compact">按筛选结果加入</button>
+                  </div>
+                  <div class="auth-list">
+                    <div class="app-row selected"><b>order-api</b><span>交易 / 张三 / 生产</span><span class="badge ok">已接入</span></div>
+                    <div class="app-row"><b>trade-job</b><span>交易 / 李四 / 生产</span><span class="badge warning">仅日志</span></div>
+                    <div class="app-row"><b>coupon-api</b><span>营销 / 王莹 / 预发</span><span class="badge restricted">未接入</span></div>
+                    <div class="app-row disabled"><b>settle-admin</b><span>财务 / 无管理权限</span><span class="badge restricted">不可授权</span></div>
+                  </div>
+                  <div class="auth-picked">
+                    <h4>已选应用</h4>
+                    <div class="picked-group"><b>交易业务线</b><span>order-api</span><span>trade-job</span></div>
+                    <div class="picked-group"><b>营销业务线</b><span>coupon-api</span></div>
+                    <div class="scope-preview">
+                      <b>权限预览</b>
+                      <p>授权应用 3 个；可见日志范围 2 个应用；可见指标范围 1 个应用；可见告警范围 3 个应用；关联服务器 18 台；生产权限 2 个；敏感权限未包含。</p>
+                    </div>
+                  </div>
+                </div>
+                <div class="drawer-footer flat"><div class="audit-note">应用授权、生产权限、敏感权限变更必须写入 audit_permission_change。</div><button class="btn secondary">取消</button><button class="btn primary">保存权限</button></div>
+              </div>
+            </div>
+          </section>
+
+          <section class="board" id="access">
+            <div class="page-head">
+              <div>
+                <div class="breadcrumb">接入管理 / 应用接入与数据源管理</div>
+                <h2>应用接入 / 数据源管理</h2>
+                <p>管理应用监控接入状态，验证指标、日志、链路、健康检查和 Agent 可用性。</p>
+              </div>
+              <div class="action-row"><button class="btn secondary">导入应用</button><button class="btn secondary">健康检查</button><button class="btn primary">新增接入</button></div>
+            </div>
+
+            <div class="metric-strip">
+              <div><span>全部</span><b>214</b></div>
+              <div><span>指标已接入</span><b>168</b></div>
+              <div><span>仅日志</span><b>18</b></div>
+              <div><span>仅指标</span><b>9</b></div>
+              <div><span>未接入</span><b>13</b></div>
+              <div class="risk"><span>采集异常</span><b>6</b></div>
+            </div>
+
+            <div class="columns access-columns">
+              <div class="panel">
+                <div class="panel-head"><h3>应用接入列表</h3><span class="badge info">验证中 4</span></div>
+                <table>
+                  <thead><tr><th>应用名称</th><th>指标</th><th>链路</th><th>日志</th><th>健康检查</th><th>Agent</th><th>状态</th><th>操作</th></tr></thead>
+                  <tbody>
+                    <tr><td>order-api<small>APP-ORDER / 生产</small></td><td>Prometheus</td><td>SkyWalking</td><td>ELK</td><td><span class="badge ok">正常</span></td><td>1.8.2</td><td><span class="badge ok">已接入</span></td><td class="ops">配置 验证 审计</td></tr>
+                    <tr><td>trade-job<small>APP-JOB / 生产</small></td><td>未接入</td><td>未接入</td><td>Loki</td><td><span class="badge warning">未配置</span></td><td>未安装</td><td><span class="badge warning">仅日志</span></td><td class="ops">接入向导 查看日志</td></tr>
+                    <tr><td>payment-api<small>APP-PAY / 生产</small></td><td>Grafana</td><td>异常</td><td>ELK</td><td><span class="badge error">失败</span></td><td>无心跳</td><td><span class="badge error">采集异常</span></td><td class="ops">查看异常 重新验证 审计</td></tr>
+                    <tr><td>coupon-api<small>APP-COUPON / 预发</small></td><td>验证中</td><td>未接入</td><td>验证中</td><td><span class="badge info">验证中</span></td><td>1.8.0</td><td><span class="badge info">验证中</span></td><td class="ops">验证进度</td></tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <div class="panel datasource-panel">
+                <div class="panel-head"><h3>数据源管理</h3><span class="badge error">异常 2</span></div>
+                <table>
+                  <thead><tr><th>数据源</th><th>类型</th><th>环境</th><th>关联应用</th><th>状态</th><th>最近检查</th></tr></thead>
+                  <tbody>
+                    <tr><td>prod-prometheus-01<small>https://prom-******.corp</small></td><td>Prometheus</td><td>生产</td><td>126</td><td><span class="badge ok">正常</span></td><td>10:35 / 42ms</td></tr>
+                    <tr><td>prod-skywalking<small>https://sw-******.corp</small></td><td>SkyWalking</td><td>生产</td><td>84</td><td><span class="badge error">异常</span></td><td>10:28 / 鉴权失败</td></tr>
+                    <tr><td>pre-loki-01<small>https://loki-******.corp</small></td><td>Loki</td><td>预发</td><td>32</td><td><span class="badge info">验证中</span></td><td>验证任务 DS-T-913</td></tr>
+                  </tbody>
+                </table>
+                <div class="notice error">生产数据源停用需确认环境、关联应用数、关联告警规则数和最近 24 小时采集异常影响，并记录 datasource_disable 审计事件。</div>
+              </div>
+            </div>
+
+            <div class="wizard">
+              <h3>接入向导验证结果</h3>
+              <div class="steps"><span class="done">1 选择应用</span><span class="done">2 配置负责人</span><span class="done">3 健康检查</span><span class="active">4 选择数据源</span><span>5 默认规则</span><span>6 验证接入</span></div>
+              <div class="verify-grid">
+                <div><b>健康检查</b><span class="badge ok">通过</span><p>/actuator/health 200 OK，耗时 68ms</p></div>
+                <div><b>指标样本</b><span class="badge error">失败</span><p>Prometheus 查询超时，最近成功采集 09:58:12</p></div>
+                <div><b>日志样本</b><span class="badge ok">通过</span><p>命中最近 10 分钟日志 1,284 条</p></div>
+                <div><b>Agent 心跳</b><span class="badge warning">版本过低</span><p>当前 1.6.9，建议升级至 1.8.2</p></div>
+              </div>
+            </div>
+          </section>
+        </div>
+      </main>
+    </div>
+  </body>
+</html>

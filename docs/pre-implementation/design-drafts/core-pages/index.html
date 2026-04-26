@@ -1,0 +1,452 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>核心排障链路高保真静态稿</title>
+  <link rel="stylesheet" href="./core-pages.css">
+</head>
+<body>
+  <aside class="side-nav">
+    <div class="brand">
+      <span class="brand-mark">UM</span>
+      <span>统一监控平台</span>
+    </div>
+    <a class="nav-item active" href="#home"><span>⌁</span>排障首页</a>
+    <a class="nav-item" href="#alert"><span>△</span>告警中心</a>
+    <a class="nav-item" href="#logs"><span>▤</span>日志中心</a>
+    <a class="nav-item" href="#app"><span>▦</span>应用监控</a>
+    <a class="nav-item" href="#metrics"><span>⌁</span>指标中心</a>
+    <a class="nav-item" href="#"><span>▣</span>服务器监控</a>
+    <a class="nav-item" href="#"><span>☏</span>通知与值班</a>
+    <a class="nav-item" href="#"><span>◇</span>接入管理</a>
+    <a class="nav-item" href="#"><span>⚙</span>系统管理</a>
+    <div class="nav-foot">
+      <span class="tag restricted">只读受控</span>
+      <p>应用授权过滤已启用</p>
+    </div>
+  </aside>
+
+  <header class="top-bar">
+    <div class="global-search">搜索应用、服务器、告警 ID、Trace ID</div>
+    <div class="top-meta">
+      <span class="env-prod">生产</span>
+      <span>自动刷新 30s</span>
+      <span>最近刷新 10:32:15</span>
+      <span class="avatar">王</span>
+    </div>
+  </header>
+
+  <main class="workspace">
+    <section id="home" class="board">
+      <div class="page-head">
+        <div>
+          <div class="crumb">首页总览 / 核心排障链路</div>
+          <h1>排障视角首页</h1>
+        </div>
+        <div class="head-actions">
+          <button class="btn secondary">保存视图</button>
+          <button class="btn primary">查询</button>
+        </div>
+      </div>
+
+      <div class="filter-bar">
+        <label>环境 <b>生产</b></label>
+        <label>范围 <b>我负责 + 我值班</b></label>
+        <label>业务线 <b>交易中台</b></label>
+        <label>负责人 <b>当前用户</b></label>
+        <label>时间 <b>最近 24h</b></label>
+        <label>Trace ID <b class="mono">trace-a1b2...f89c</b></label>
+        <button class="btn primary">查询</button>
+        <button class="btn secondary">重置</button>
+      </div>
+
+      <div class="notice info">
+        新增 1 条 P1 告警，已置顶到待处理问题队列。统计、日志、指标均按 18 个授权应用过滤。
+      </div>
+
+      <div class="summary-grid five">
+        <article class="metric-card">
+          <span>整体健康</span>
+          <strong class="critical-text">异常</strong>
+          <em>业务异常 5 / 接入异常 2</em>
+        </article>
+        <article class="metric-card">
+          <span>我的异常应用</span>
+          <strong>5</strong>
+          <em>order-api、pay-core 置顶</em>
+        </article>
+        <article class="metric-card">
+          <span>待处理告警</span>
+          <strong class="critical-text">12</strong>
+          <em>P0 1 / P1 4 / P2 7</em>
+        </article>
+        <article class="metric-card">
+          <span>ERROR 增长</span>
+          <strong class="error-text">+38%</strong>
+          <em>较前 1h，授权范围内</em>
+        </article>
+        <article class="metric-card">
+          <span>慢接口 TOP</span>
+          <strong>2.8s</strong>
+          <em>/api/order/confirm P95</em>
+        </article>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">
+          <h2>待处理问题队列</h2>
+          <span>默认按 P0/P1、未确认、持续时间排序</span>
+        </div>
+        <table class="data-table compact">
+          <thead>
+            <tr>
+              <th>级别</th><th>状态</th><th>应用 / 实例</th><th>问题摘要</th><th>影响接口 / 指标</th><th>Trace ID</th><th>负责人</th><th>持续</th><th>操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="risk-p0">
+              <td><span class="tag p0">P0 紧急</span></td>
+              <td><span class="tag info">已通知</span></td>
+              <td><b>pay-core</b><small>10.2.6.11:8080</small></td>
+              <td>支付核心不可用，健康检查连续失败</td>
+              <td>/api/pay/create · 可用性</td>
+              <td><a class="mono link">trace-f931...04cc</a></td>
+              <td>交易值班组</td>
+              <td>12m</td>
+              <td><a>详情</a><a>日志</a><a>指标</a></td>
+            </tr>
+            <tr class="risk-p1">
+              <td><span class="tag p1">P1 严重</span></td>
+              <td><span class="tag info">已确认</span></td>
+              <td><b>order-api</b><small>10.2.8.15:8080</small></td>
+              <td>生产环境错误率高于阈值</td>
+              <td>/api/order/confirm · 错误率</td>
+              <td><a class="mono link">trace-a1b2...f89c</a></td>
+              <td>李明</td>
+              <td>8m</td>
+              <td><a>详情</a><a>日志</a><a>指标</a></td>
+            </tr>
+            <tr>
+              <td><span class="tag p2">P2 一般</span></td>
+              <td><span class="tag warning">处理中</span></td>
+              <td><b>stock-sync</b><small>10.2.9.21:7070</small></td>
+              <td>消息积压超过预警阈值</td>
+              <td>mq.lag · 积压量</td>
+              <td>-</td>
+              <td>周婷</td>
+              <td>31m</td>
+              <td><a>详情</a><a>应用</a><a>指标</a></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="split">
+        <div class="panel">
+          <div class="panel-title"><h2>24h 告警趋势</h2><span>采样粒度 5m</span></div>
+          <div class="chart line-chart">
+            <i class="threshold"></i>
+            <span class="point p0-point" style="left:72%;top:31%"></span>
+            <span class="point p1-point" style="left:55%;top:45%"></span>
+          </div>
+          <div class="legend"><span class="dot critical"></span>P0/P1 未恢复 <span class="dot warning"></span>P2/P3 <span class="dot info-dot"></span>日志命中点</div>
+        </div>
+        <div class="panel">
+          <div class="panel-title"><h2>错误聚合 TOP5</h2><span>点击错误签名进入日志查询</span></div>
+          <table class="data-table compact">
+            <thead><tr><th>错误签名</th><th>异常类型</th><th>应用</th><th>次数</th><th>影响 Trace</th><th>操作</th></tr></thead>
+            <tbody>
+              <tr><td>OrderStatusIllegal: paid...</td><td>IllegalStateException</td><td>order-api</td><td>1,286</td><td>342</td><td><a>查日志</a><a>应用</a></td></tr>
+              <tr><td>Redis timeout after 500ms</td><td>TimeoutException</td><td>pay-core</td><td>893</td><td>211</td><td><a>查日志</a><a>指标</a></td></tr>
+              <tr><td>NullPointer at CouponRule</td><td>NullPointerException</td><td>coupon-api</td><td>416</td><td>88</td><td><a>查日志</a><a>应用</a></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section id="alert" class="board">
+      <div class="page-head alert-head">
+        <div>
+          <div class="crumb">告警中心 / 告警详情 / ALM-20260426-001</div>
+          <h1>order-api 生产环境错误率过高 <span class="tag p1">P1 严重</span> <span class="tag info">已通知</span> <span class="tag error">持续 8m</span></h1>
+        </div>
+        <div class="head-actions">
+          <button class="btn primary">确认告警</button>
+          <button class="btn secondary">标记处理中</button>
+          <button class="btn secondary">添加备注</button>
+          <button class="btn secondary">转派</button>
+          <button class="btn danger">关闭</button>
+        </div>
+      </div>
+
+      <div class="context-strip">
+        来源：排障首页 / order-api / 生产 / 10:00-10:30
+        <a>返回首页</a><a>清除来源</a>
+      </div>
+
+      <div class="fact-row">
+        <div><span>应用</span><b>order-api</b></div>
+        <div><span>环境</span><b>生产</b></div>
+        <div><span>实例</span><b>10.2.8.15:8080</b></div>
+        <div><span>负责人</span><b>李明 / 交易值班组</b></div>
+        <div><span>首次触发</span><b>2026-04-26 10:24:12</b></div>
+        <div><span>最近通知</span><b>企业微信成功，短信失败</b></div>
+      </div>
+
+      <div class="split evidence">
+        <div class="panel">
+          <div class="panel-title"><h2>触发指标趋势</h2><span>错误率当前 6.2% / 阈值 5.0% / 检测周期 1m 连续 5 次</span></div>
+          <div class="chart metric-chart">
+            <i class="threshold"></i>
+            <span class="threshold-label">阈值 5.0%</span>
+            <span class="event-line"></span>
+            <span class="point p1-point" style="left:62%;top:39%"></span>
+          </div>
+        </div>
+        <div class="panel locate-card">
+          <div class="panel-title"><h2>快速定位</h2><span>可复制，可跳转</span></div>
+          <dl>
+            <dt>Trace ID</dt><dd><a class="mono link">trace-a1b2c3d4e5f89c</a></dd>
+            <dt>Request ID</dt><dd><span class="mono">req-20260426-99231</span></dd>
+            <dt>错误签名</dt><dd>OrderStatusIllegal: paid cannot confirm</dd>
+            <dt>影响接口</dt><dd>/api/order/confirm</dd>
+            <dt>关联日志</dt><dd><b class="error-text">128</b> 条 ERROR，前后 30 分钟</dd>
+          </dl>
+          <div class="action-row">
+            <button class="btn primary">查关联日志</button>
+            <button class="btn secondary">看应用详情</button>
+            <button class="btn secondary">看指标趋势</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="tabs"><b>处理记录</b><span>关联日志</span><span>影响对象</span><span>通知记录</span><span>规则信息</span><span>审计</span></div>
+        <div class="timeline">
+          <div><time>10:24:12</time><b>告警触发</b><p>错误率 6.2%，超过阈值 5.0%，规则 order-api-error-rate-prod。</p></div>
+          <div><time>10:24:18</time><b>通知完成</b><p>企业微信发送成功；短信网关返回 429，已记录通知失败，可重试。</p></div>
+          <div><time>10:28:02</time><b>李明确认告警</b><p>确认存在订单确认失败，正在查看关联日志。审计 AUD-20260426-0312。</p></div>
+        </div>
+        <table class="data-table compact">
+          <thead><tr><th>时间</th><th>级别</th><th>应用</th><th>实例</th><th>Trace ID</th><th>线程</th><th>错误摘要</th><th>操作</th></tr></thead>
+          <tbody>
+            <tr><td>10:28:41</td><td><span class="tag error">ERROR</span></td><td>order-api</td><td>10.2.8.15</td><td><a class="mono link">trace-a1b2...f89c</a></td><td>http-nio-42</td><td>OrderStatusIllegal: paid cannot confirm, user=138****0000</td><td><a>上下文</a><a>查同类</a><a>指标</a></td></tr>
+            <tr><td>10:28:39</td><td><span class="tag warning">WARN</span></td><td>order-api</td><td>10.2.8.16</td><td><a class="mono link">trace-a1b2...91dd</a></td><td>worker-7</td><td>Redis timeout after 500ms, token=******</td><td><a>上下文</a><a>查同类</a><a>指标</a></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="logs" class="board">
+      <div class="page-head">
+        <div>
+          <div class="crumb">日志中心 / 日志查询</div>
+          <h1>日志查询 <span class="tag restricted">日志导出需审计授权</span></h1>
+        </div>
+        <div class="head-actions">
+          <button class="btn secondary">保存查询</button>
+          <button class="btn disabled">导出</button>
+        </div>
+      </div>
+
+      <div class="context-strip">
+        来源：告警 ALM-20260426-001 / order-api / 生产 / 10:14-10:44 / Trace ID trace-a1b2...f89c
+        <a>返回告警</a><a>清除来源</a>
+      </div>
+
+      <div class="filter-bar two-line">
+        <label>应用 <b>order-api</b></label>
+        <label>环境 <b>生产</b></label>
+        <label>实例 <b>10.2.8.15:8080</b></label>
+        <label>时间 <b>10:14 - 10:44</b></label>
+        <label>级别 <b>ERROR</b></label>
+        <label>Trace ID <b class="mono">trace-a1b2c3d4e5f89c</b></label>
+        <label>Request ID <b>req-20260426-99231</b></label>
+        <label>关键字 <b>OrderStatusIllegal</b></label>
+        <button class="btn primary">查询</button>
+        <button class="btn secondary">重置</button>
+      </div>
+
+      <div class="split">
+        <div class="panel">
+          <div class="panel-title"><h2>错误聚合</h2><span>优先展示错误签名、异常类型、接口、实例维度</span></div>
+          <table class="data-table compact">
+            <thead><tr><th>错误签名</th><th>异常类型</th><th>接口</th><th>实例数</th><th>日志次数</th><th>影响 Trace</th><th>操作</th></tr></thead>
+            <tbody>
+              <tr><td>OrderStatusIllegal: paid cannot confirm</td><td>IllegalStateException</td><td>/api/order/confirm</td><td>3</td><td>128</td><td>41</td><td><a>查同类</a><a>指标</a><a>应用</a></td></tr>
+              <tr><td>Redis timeout after 500ms</td><td>TimeoutException</td><td>/api/order/confirm</td><td>2</td><td>43</td><td>19</td><td><a>查同类</a><a>指标</a><a>应用</a></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="panel">
+          <div class="panel-title"><h2>日志时间分布</h2><span>ERROR/WARN 分布，含告警触发线</span></div>
+          <div class="bar-chart">
+            <i style="height:28%"></i><i style="height:42%"></i><i style="height:36%"></i><i style="height:72%"></i><i class="hot" style="height:88%"></i><i class="hot" style="height:66%"></i><i style="height:39%"></i><i style="height:24%"></i>
+            <span class="event-line"></span>
+          </div>
+          <div class="legend"><span class="dot error-dot"></span>ERROR <span class="dot warning"></span>WARN <span class="dot info-dot"></span>告警触发</div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title"><h2>日志明细</h2><span>上下文默认前后各 50 行；敏感字段默认脱敏</span></div>
+        <table class="data-table log-table">
+          <thead><tr><th>时间</th><th>级别</th><th>应用</th><th>环境</th><th>实例</th><th>Trace ID</th><th>接口</th><th>线程</th><th>摘要</th><th>脱敏</th><th>操作</th></tr></thead>
+          <tbody>
+            <tr><td>10:28:41.238</td><td><span class="tag error">ERROR</span></td><td>order-api</td><td>生产</td><td>10.2.8.15</td><td><a class="mono link">trace-a1b2...f89c</a></td><td>/api/order/confirm</td><td>http-nio-42</td><td><mark>OrderStatusIllegal</mark>: paid cannot confirm, user=138****0000, token=******</td><td><span class="tag restricted">已脱敏</span></td><td><a>上下文</a><a>堆栈</a><a>指标</a></td></tr>
+            <tr><td>10:28:40.904</td><td><span class="tag error">ERROR</span></td><td>order-api</td><td>生产</td><td>10.2.8.16</td><td><a class="mono link">trace-a1b2...91dd</a></td><td>/api/order/confirm</td><td>worker-7</td><td>Redis timeout after 500ms when lock orderNo=O20260426***</td><td><span class="tag restricted">已脱敏</span></td><td><a>上下文</a><a>堆栈</a><a>指标</a></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="drawer-mock">
+        <div class="panel-title"><h2>日志上下文抽屉</h2><span>同应用 / 同环境 / 同实例 / 同 Trace ID，前后各 50 行</span></div>
+        <pre><span>10:28:40.221 INFO  validate order input ok trace-a1b2...</span>
+<b>10:28:41.238 ERROR OrderStatusIllegal: paid cannot confirm</b>
+<span>10:28:41.241 ERROR   at com.example.order.ConfirmService.confirm(ConfirmService.java:128)</span>
+<span>10:28:41.245 INFO  response status=500 requestId=req-20260426-99231</span></pre>
+      </div>
+    </section>
+
+    <section id="app" class="board">
+      <div class="page-head">
+        <div>
+          <div class="crumb">应用监控 / 应用详情 / order-api</div>
+          <h1>order-api <span class="tag error">异常</span> <span class="env-prod">生产</span></h1>
+        </div>
+        <div class="head-actions">
+          <button class="btn primary">查看日志</button>
+          <button class="btn secondary">指标趋势</button>
+          <button class="btn secondary">返回来源</button>
+        </div>
+      </div>
+
+      <div class="context-strip">
+        当前页面来自日志 trace-a1b2...f89c，已定位到实例 10.2.8.15；仅展示已授权应用与关联服务器。
+        <a>返回日志</a><a>清除来源</a>
+      </div>
+
+      <div class="fact-row">
+        <div><span>编码</span><b>APP-ORDER-API</b></div>
+        <div><span>负责人</span><b>李明</b></div>
+        <div><span>业务线</span><b>交易中台</b></div>
+        <div><span>技术栈</span><b>Java 17 / Spring Boot</b></div>
+        <div><span>最近发布</span><b>v3.18.7 / 09:42</b></div>
+        <div><span>仓库</span><b>git/order-api</b></div>
+      </div>
+
+      <div class="source-strip">
+        <span class="tag ok">Prometheus 正常</span>
+        <span class="tag ok">日志源正常</span>
+        <span class="tag restricted">SkyWalking 未接入</span>
+        <span class="tag warning">指标采集延迟 4 分钟</span>
+        <span class="tag restricted">只读：无接入配置权限</span>
+      </div>
+
+      <div class="summary-grid five">
+        <article class="metric-card"><span>实例</span><strong>4/5</strong><em>1 个 Agent 离线</em></article>
+        <article class="metric-card"><span>错误率</span><strong class="error-text">6.2%</strong><em>阈值 5.0%</em></article>
+        <article class="metric-card"><span>QPS</span><strong>1,200</strong><em>较前 1h +11%</em></article>
+        <article class="metric-card"><span>P95</span><strong class="warning-text">2.3s</strong><em>慢接口集中</em></article>
+        <article class="metric-card"><span>未恢复告警</span><strong class="critical-text">4</strong><em>P1 2 / P2 2</em></article>
+      </div>
+
+      <div class="split">
+        <div class="panel">
+          <div class="panel-title"><h2>请求量 / 错误率</h2><span>统一时间轴，缺失数据断线</span></div>
+          <div class="chart line-chart"><i class="threshold"></i><span class="point p1-point" style="left:66%;top:36%"></span></div>
+        </div>
+        <div class="panel">
+          <div class="panel-title"><h2>P95 / P99 响应时间</h2><span>采样粒度 1m</span></div>
+          <div class="chart line-chart secondary-lines"><span class="point warning-point" style="left:58%;top:42%"></span></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="tabs"><b>概览</b><span>实例</span><span>接口</span><span>运行时</span><span>依赖</span><span>告警</span><span>接入状态</span></div>
+        <table class="data-table compact">
+          <thead><tr><th>实例 IP</th><th>版本</th><th>启动时间</th><th>健康状态</th><th>CPU / 内存</th><th>错误率</th><th>当前告警</th><th>操作</th></tr></thead>
+          <tbody>
+            <tr><td>10.2.8.15:8080</td><td>v3.18.7</td><td>09:45:11</td><td><span class="tag error">异常</span></td><td>71% / 68%</td><td class="error-text">8.4%</td><td>2</td><td><a>日志</a><a>指标</a><a>服务器</a></td></tr>
+            <tr><td>10.2.8.16:8080</td><td>v3.18.7</td><td>09:46:02</td><td><span class="tag warning">预警</span></td><td>62% / 59%</td><td>3.1%</td><td>1</td><td><a>日志</a><a>指标</a><a>服务器</a></td></tr>
+            <tr><td>10.2.8.17:8080</td><td>v3.18.6</td><td>04:12:20</td><td><span class="tag ok">正常</span></td><td>38% / 45%</td><td>0.4%</td><td>0</td><td><a>日志</a><a>指标</a><a>服务器</a></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="metrics" class="board">
+      <div class="page-head">
+        <div>
+          <div class="crumb">指标中心 / 指标趋势</div>
+          <h1>指标趋势 <span class="tag info">告警窗口</span> <span class="tag warning">最后数据点 10:27:00</span></h1>
+        </div>
+        <div class="head-actions">
+          <button class="btn secondary">收藏</button>
+          <button class="btn disabled">导出图片</button>
+        </div>
+      </div>
+
+      <div class="filter-bar">
+        <label>应用 <b>order-api</b></label>
+        <label>环境 <b>生产</b></label>
+        <label>实例 <b>10.2.8.15</b></label>
+        <label>接口 <b>/api/order/confirm</b></label>
+        <label>指标 <b>错误率 / QPS / P95 / P99</b></label>
+        <label>聚合 <b>Avg</b></label>
+        <label>粒度 <b>1m</b></label>
+        <button class="btn primary">查询</button>
+      </div>
+
+      <div class="context-strip">
+        来源：告警 ALM-20260426-001 / 日志 trace-a1b2...f89c / 命中时间 10:28:41
+        <a>返回告警</a><a>返回日志</a><a>清除来源</a>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title"><h2>主趋势：错误率</h2><span>阈值线、告警触发点、日志命中点与恢复点同图展示</span></div>
+        <div class="chart main-trend">
+          <i class="threshold"></i>
+          <span class="threshold-label">阈值 5.0%</span>
+          <span class="event-line alarm"></span>
+          <span class="log-line"></span>
+          <span class="point p1-point" style="left:62%;top:35%"></span>
+          <span class="point info-point" style="left:69%;top:45%"></span>
+        </div>
+        <div class="legend"><span class="dot error-dot"></span>错误率 <span class="dot critical"></span>告警触发点 <span class="dot info-dot"></span>日志命中点 <span class="dot warning"></span>阈值线</div>
+      </div>
+
+      <div class="split">
+        <div class="panel">
+          <div class="panel-title"><h2>QPS / 请求量</h2><span>与主图对齐</span></div>
+          <div class="chart line-chart bars-under"></div>
+        </div>
+        <div class="panel">
+          <div class="panel-title"><h2>P95 / P99 响应时间</h2><span>异常区间浅红背景</span></div>
+          <div class="chart line-chart danger-zone"></div>
+        </div>
+      </div>
+
+      <div class="split">
+        <div class="panel">
+          <div class="panel-title"><h2>实例资源 CPU / 内存</h2><span>按实例授权过滤</span></div>
+          <div class="chart line-chart secondary-lines"></div>
+        </div>
+        <div class="panel">
+          <div class="panel-title"><h2>关联事件</h2><span>发布、告警、ERROR 峰值、实例重启</span></div>
+          <table class="data-table compact">
+            <thead><tr><th>时间</th><th>类型</th><th>对象</th><th>摘要</th><th>关联 ID</th><th>操作</th></tr></thead>
+            <tbody>
+              <tr><td>09:42</td><td><span class="tag unknown">发布</span></td><td>order-api</td><td>发布 v3.18.7 至生产 3 个实例</td><td>REL-4821</td><td><a>应用</a></td></tr>
+              <tr><td>10:24</td><td><span class="tag p1">P1 严重</span></td><td>/api/order/confirm</td><td>错误率超过阈值并持续 5 分钟</td><td>ALM-20260426-001</td><td><a>告警</a><a>日志</a></td></tr>
+              <tr><td>10:28</td><td><span class="tag error">日志峰值</span></td><td>10.2.8.15</td><td>ERROR 峰值 128 条，含脱敏字段</td><td class="mono">trace-a1b2...</td><td><a>日志</a></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

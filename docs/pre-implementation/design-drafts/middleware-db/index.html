@@ -1,0 +1,336 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>统一监控平台 - 中间件与数据库监控高保真</title>
+  <link rel="stylesheet" href="./middleware-db.css">
+</head>
+<body>
+  <aside class="sidebar">
+    <div class="brand">
+      <span class="brand-mark">M</span>
+      <span>统一监控平台</span>
+    </div>
+    <nav class="nav-list" aria-label="主导航">
+      <a href="#mq-list" class="active"><span class="ico">▧</span>中间件监控</a>
+      <a href="#db-list"><span class="ico">▥</span>数据库监控</a>
+      <a href="#mq-detail"><span class="ico">⌁</span>中间件详情</a>
+      <a href="#db-detail"><span class="ico">▤</span>数据库详情</a>
+      <a href="#topology"><span class="ico">◇</span>依赖拓扑</a>
+      <a href="#alert-linkage"><span class="ico">△</span>告警联动</a>
+      <a href="#exports"><span class="ico">⇩</span>导出与审计</a>
+    </nav>
+    <div class="side-note">
+      <div class="tiny-label">授权范围</div>
+      <strong>42 个中间件 / 31 个数据库</strong>
+      <span>生产库连接信息默认脱敏，导出记录审计</span>
+    </div>
+  </aside>
+
+  <header class="topbar">
+    <div class="global-search">搜索应用、Topic、Consumer Group、数据库、实例 IP</div>
+    <div class="topbar-actions">
+      <span class="env-pill">生产</span>
+      <span class="refresh-dot">自动刷新 30s</span>
+      <span class="time">更新于 10:31:20</span>
+      <span class="avatar">张</span>
+    </div>
+  </header>
+
+  <main class="workspace">
+    <section class="cover board">
+      <div>
+        <div class="breadcrumb">UI 高保真 / 中间件与数据库监控</div>
+        <h1>中间件与数据库监控工作台</h1>
+        <p>覆盖 Redis、Kafka、RocketMQ、MySQL、PostgreSQL 等核心依赖对象。首屏优先展示异常实例、影响应用、负责人、数据源状态和可跳转证据，未授权应用与连接敏感信息不出现在统计、列表和导出结果中。</p>
+      </div>
+      <div class="cover-grid">
+        <div><strong>依赖风险聚合</strong><span>实例健康、业务影响、接入异常分开展示</span></div>
+        <div><strong>应用关联定位</strong><span>从 Topic、连接池、慢 SQL 回跳应用详情</span></div>
+        <div><strong>告警指标联动</strong><span>触发点、阈值线、日志命中和处理记录连续</span></div>
+        <div><strong>权限与审计</strong><span>生产连接、导出、明文查看均受控</span></div>
+      </div>
+    </section>
+
+    <section id="mq-list" class="board">
+      <div class="page-head">
+        <div>
+          <div class="breadcrumb">中间件监控 / 资源列表</div>
+          <h2>中间件监控列表</h2>
+          <p>授权资源 42 个 / 生产 18 个 / 采集异常 3 个</p>
+        </div>
+        <div class="actions">
+          <button class="btn ghost">刷新</button>
+          <button class="btn ghost">保存视图</button>
+          <button class="btn disabled" title="当前角色暂无生产导出权限">导出</button>
+        </div>
+      </div>
+      <div class="filter-bar">
+        <div class="field wide">资源名称/Topic <b>order-event</b></div>
+        <div class="field">类型 <b>全部</b></div>
+        <div class="field">环境 <b>生产</b></div>
+        <div class="field">状态 <b>异常/严重</b></div>
+        <div class="field">负责人 <b>我负责</b></div>
+        <button class="btn primary">查询</button>
+        <button class="btn ghost">重置</button>
+      </div>
+      <div class="notice danger"><strong>数据质量：</strong>Kafka Exporter 采集异常，order-event 展示最近成功采集数据，最近成功时间 10:25:04。</div>
+      <div class="summary-strip">
+        <span>全部 <b>42</b></span><span class="ok">正常 31</span><span class="warn-text">预警 5</span><span class="error-text">异常 4</span><span class="critical-text">严重 2</span><span>未接入 3</span><span>采集异常 3</span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>资源</th><th>类型</th><th>环境</th><th>健康状态</th><th>接入状态</th><th>核心指标</th><th>影响应用</th><th>当前告警</th><th>负责人</th><th>更新时间</th><th>操作</th></tr></thead>
+          <tbody>
+            <tr class="risk-critical"><td><strong>kafka-prod-a / order-event</strong><small>Topic / 6 分区 / RF=3</small></td><td>Kafka</td><td><span class="tag prod">生产</span></td><td><span class="tag critical">严重</span></td><td><span class="tag error">采集异常</span><span class="tag info">日志已接入</span></td><td><b class="critical-text">Lag 128k</b><small>生产速率 8.2k/s</small></td><td>order-api、pay-gateway +3</td><td><span class="tag p0">P0 紧急 1</span></td><td>交易值班组</td><td>10:25:04</td><td><a>详情</a><a>指标</a><a>告警</a></td></tr>
+            <tr><td><strong>redis-cluster-pay</strong><small>Cluster / 12 shards</small></td><td>Redis</td><td><span class="tag prod">生产</span></td><td><span class="tag error">异常</span></td><td><span class="tag ok">指标已接入</span></td><td><b class="error-text">命中率 81%</b><small>used_memory 78%</small></td><td>pay-core、coupon-api</td><td><span class="tag p1">P1 严重 2</span></td><td>李岩</td><td>10:31:12</td><td><a>详情</a><a>拓扑</a><a>更多</a></td></tr>
+            <tr><td><strong>rocketmq-stock</strong><small>Consumer Group stock-sync</small></td><td>RocketMQ</td><td><span class="tag">预发</span></td><td><span class="tag warning">预警</span></td><td><span class="tag warning">仅指标</span></td><td>堆积 18k<small>消费延迟 7.5s</small></td><td>inventory-worker</td><td><span class="tag p2">P2 一般 1</span></td><td>王珂</td><td>10:30:49</td><td><a>详情</a><a class="muted">日志</a><a>指标</a></td></tr>
+            <tr><td><strong>es-log-search</strong><small>Index logs-prod-*</small></td><td>Elasticsearch</td><td><span class="tag prod">生产</span></td><td><span class="tag unknown">未知</span></td><td><span class="tag restricted">未接入</span></td><td>-</td><td>日志中心</td><td>无</td><td>SRE 平台组</td><td>--</td><td><a>接入指引</a><a>审计</a></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="footer-line">主状态按严重、异常、预警、采集异常、未接入、未知、正常聚合；采集异常计入接入风险，不误判业务正常。</div>
+    </section>
+
+    <section id="db-list" class="board">
+      <div class="page-head">
+        <div>
+          <div class="breadcrumb">数据库监控 / 数据库列表</div>
+          <h2>数据库监控列表</h2>
+          <p>授权数据库 31 个 / 慢 SQL 异常 5 个 / 连接池异常 2 个</p>
+        </div>
+        <div class="actions"><button class="btn ghost">刷新</button><button class="btn ghost">保存查询</button><button class="btn ghost">导出</button></div>
+      </div>
+      <div class="filter-bar">
+        <div class="field wide">库名/实例 <b>order_main</b></div>
+        <div class="field">类型 <b>MySQL</b></div>
+        <div class="field">环境 <b>生产</b></div>
+        <div class="field">状态 <b>全部</b></div>
+        <div class="field">业务线 <b>交易域</b></div>
+        <button class="btn primary">查询</button>
+        <button class="btn ghost">高级筛选</button>
+      </div>
+      <div class="summary-strip">
+        <span>全部 <b>31</b></span><span class="ok">正常 22</span><span class="warn-text">预警 4</span><span class="error-text">异常 4</span><span class="critical-text">严重 1</span><span>只读实例 9</span><span>连接脱敏 31</span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>数据库</th><th>类型</th><th>环境</th><th>主从/角色</th><th>健康状态</th><th>连接池</th><th>QPS/TPS</th><th>慢 SQL</th><th>影响应用</th><th>权限</th><th>操作</th></tr></thead>
+          <tbody>
+            <tr class="risk-critical"><td><strong>order_main</strong><small>rm-bp18***:3306 / DB-1008</small></td><td>MySQL 8.0</td><td><span class="tag prod">生产</span></td><td>主库 / 2 只读</td><td><span class="tag critical">严重</span></td><td><b class="critical-text">92%</b><small>Hikari active 184/200</small></td><td>18.2k / 4.6k</td><td><span class="tag p0">P0 32 条</span></td><td>order-api +4</td><td><span class="tag restricted">连接脱敏</span></td><td><a>详情</a><a>慢 SQL</a><a>告警</a></td></tr>
+            <tr><td><strong>pay_ledger</strong><small>pg-pay-prod.internal:5432</small></td><td>PostgreSQL 14</td><td><span class="tag prod">生产</span></td><td>主库 / 1 只读</td><td><span class="tag error">异常</span></td><td><b class="error-text">78%</b><small>等待连接 16</small></td><td>9.6k / 2.1k</td><td>12 条</td><td>pay-core</td><td><span class="tag restricted">只读</span></td><td><a>详情</a><a>指标</a><a>拓扑</a></td></tr>
+            <tr><td><strong>member_profile</strong><small>mongo-member-prod / rs0</small></td><td>MongoDB</td><td><span class="tag prod">生产</span></td><td>Primary / 2 Secondary</td><td><span class="tag warning">预警</span></td><td>64%</td><td>5.1k / -</td><td>4 条</td><td>member-api</td><td><span class="tag restricted">脱敏</span></td><td><a>详情</a><a>指标</a></td></tr>
+            <tr><td><strong>coupon_test</strong><small>10.33.5.18:3306</small></td><td>MySQL 5.7</td><td><span class="tag">测试</span></td><td>单实例</td><td><span class="tag unknown">未知</span></td><td>-</td><td>-</td><td>-</td><td>coupon-admin</td><td><span class="tag restricted">未接入</span></td><td><a>接入指引</a></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="footer-line">生产库连接地址默认脱敏；明文查看需敏感权限并生成 sensitive_view 审计事件。</div>
+    </section>
+
+    <section id="mq-detail" class="board detail-board">
+      <div class="page-head">
+        <div>
+          <div class="breadcrumb">中间件监控 / Kafka / kafka-prod-a / order-event</div>
+          <h2>order-event 消息链路详情 <span class="tag critical">严重</span> <span class="tag error">指标采集异常</span></h2>
+          <p>生产 / Topic / 更新于 10:25:04 / 最近成功采集时间 10:25:04</p>
+        </div>
+        <div class="actions"><button class="btn primary">查看关联告警</button><button class="btn ghost">查消费日志</button><button class="btn ghost">导出指标</button></div>
+      </div>
+      <div class="fact-row">
+        <div><span>Owner</span><b>交易值班组</b></div>
+        <div><span>Topic</span><b>order-event</b></div>
+        <div><span>Broker</span><b>6 / ISR 异常 1</b></div>
+        <div><span>Consumer Group</span><b>5 个 / 2 个异常</b></div>
+        <div><span>业务影响</span><b class="critical-text">下单确认延迟</b></div>
+        <div><span>权限</span><b>授权应用范围内可见</b></div>
+      </div>
+      <div class="split-row wide-left">
+        <div class="panel">
+          <div class="panel-head"><strong>消息堆积与消费速率</strong><span>采样粒度 1m / 阈值 Lag 80k</span></div>
+          <div class="chart mq-chart">
+            <div class="threshold"></div>
+            <div class="line line-main"></div>
+            <div class="line line-alt"></div>
+            <span class="point p0-point">P0</span>
+            <span class="event-marker">发布 v2.8.1</span>
+          </div>
+          <div class="legend"><span class="legend-main">Lag</span><span class="legend-alt">消费速率</span><span class="legend-threshold">阈值 80k</span><span>日志命中点 42</span></div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><strong>Consumer Group 状态</strong><span>按 Lag 降序</span></div>
+          <div class="kv-list">
+            <div><span>order-confirm-consumer</span><b class="critical-text">Lag 128k</b></div>
+            <div><span>risk-check-consumer</span><b class="error-text">Lag 38k</b></div>
+            <div><span>coupon-consumer</span><b>Lag 1.2k</b></div>
+            <div><span>pay-notify-consumer</span><b>Lag 860</b></div>
+          </div>
+          <div class="notice warn compact"><strong>建议：</strong>优先检查 order-api 10.2.8.15 消费线程池与 Redis timeout。</div>
+        </div>
+      </div>
+      <div class="tabs"><button class="active">指标</button><button>消费者</button><button>日志样例</button><button>告警</button><button>审计</button></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>时间</th><th>Consumer Group</th><th>Lag</th><th>消费速率</th><th>错误日志</th><th>关联 Trace</th><th>处理建议</th></tr></thead>
+          <tbody>
+            <tr><td>10:30</td><td>order-confirm-consumer</td><td class="critical-text">128,420</td><td>2.1k/s</td><td>128 条</td><td><a class="mono">trace-a1b2...f89c</a></td><td>查看 order-api 线程池与数据库连接池</td></tr>
+            <tr><td>10:25</td><td>risk-check-consumer</td><td class="error-text">38,210</td><td>1.8k/s</td><td>42 条</td><td><a class="mono">trace-f931...04cc</a></td><td>检查风控依赖 Redis 命中率</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="db-detail" class="board detail-board">
+      <div class="page-head">
+        <div>
+          <div class="breadcrumb">数据库监控 / MySQL / order_main</div>
+          <h2>order_main 数据库详情 <span class="tag critical">严重</span> <span class="tag restricted">连接脱敏</span></h2>
+          <p>生产 / 主库 / DB-1008 / 更新于 10:31:12</p>
+        </div>
+        <div class="actions"><button class="btn primary">查看慢 SQL</button><button class="btn ghost">看应用依赖</button><button class="btn danger">申请明文连接</button></div>
+      </div>
+      <div class="fact-row">
+        <div><span>连接池</span><b class="critical-text">184 / 200</b></div>
+        <div><span>QPS</span><b>18.2k</b></div>
+        <div><span>TPS</span><b>4.6k</b></div>
+        <div><span>锁等待</span><b class="error-text">38</b></div>
+        <div><span>慢 SQL</span><b class="critical-text">32 条 / 15m</b></div>
+        <div><span>最近备份</span><b>成功 / 02:00</b></div>
+      </div>
+      <div class="split-row wide-left">
+        <div class="panel">
+          <div class="panel-head"><strong>连接池与慢 SQL 联动趋势</strong><span>阈值 active 160 / 慢 SQL 1000ms</span></div>
+          <div class="chart db-chart">
+            <div class="threshold"></div>
+            <div class="line line-main"></div>
+            <div class="line line-alt"></div>
+            <span class="point p0-point">P0</span>
+            <span class="event-marker">批任务开始</span>
+          </div>
+          <div class="legend"><span class="legend-main">active connections</span><span class="legend-alt">slow sql count</span><span class="legend-threshold">阈值 160</span></div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><strong>慢 SQL TOP</strong><span>默认脱敏参数值</span></div>
+          <div class="sql-box">
+            <div><b>1. select * from orders where user_id=? and status=?</b><span>2.8s / 1,286 次 / order-api</span></div>
+            <div><b>2. update order_item set stock_status=? where order_id=?</b><span>1.9s / 842 次 / inventory-worker</span></div>
+            <div><b>3. select coupon_id from coupon_bind where phone=138****0000</b><span>1.4s / 416 次 / coupon-api</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>应用</th><th>连接池</th><th>错误率</th><th>慢 SQL</th><th>最近 Trace</th><th>负责人</th><th>操作</th></tr></thead>
+          <tbody>
+            <tr class="risk-critical"><td><strong>order-api</strong><small>APP-1008 / 生产</small></td><td class="critical-text">184/200</td><td>6.2%</td><td>1,286</td><td><a class="mono">trace-a1b2...f89c</a></td><td>陈静</td><td><a>应用详情</a><a>日志</a><a>指标</a></td></tr>
+            <tr><td><strong>inventory-worker</strong><small>APP-1036 / 预发</small></td><td class="warn-text">72/100</td><td>0.8%</td><td>842</td><td><a class="mono">trace-c612...91ab</a></td><td>王珂</td><td><a>应用详情</a><a>慢 SQL</a></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="topology" class="board">
+      <div class="page-head">
+        <div>
+          <div class="breadcrumb">应用依赖 / 摘要与拓扑</div>
+          <h2>应用依赖摘要 / 拓扑</h2>
+          <p>从应用、数据库、中间件三类对象聚合影响面；未授权应用名称不展示。</p>
+        </div>
+        <div class="actions"><button class="btn ghost">按故障链路高亮</button><button class="btn ghost">导出拓扑</button></div>
+      </div>
+      <div class="dependency-summary">
+        <div><span>受影响应用</span><b class="critical-text">6</b><small>order-api、pay-core +4</small></div>
+        <div><span>异常中间件</span><b class="error-text">3</b><small>Kafka、Redis、RocketMQ</small></div>
+        <div><span>异常数据库</span><b class="critical-text">1</b><small>order_main 主库</small></div>
+        <div><span>未授权依赖</span><b>2</b><small>仅显示数量，不泄露名称</small></div>
+      </div>
+      <div class="topology-canvas">
+        <div class="node app critical" style="left:40px;top:118px;"><b>order-api</b><span>P0 / 错误率 6.2%</span></div>
+        <div class="node app error" style="left:40px;top:238px;"><b>pay-core</b><span>P1 / P95 820ms</span></div>
+        <div class="node middleware critical" style="left:360px;top:88px;"><b>Kafka order-event</b><span>Lag 128k</span></div>
+        <div class="node middleware error" style="left:360px;top:238px;"><b>Redis pay</b><span>命中率 81%</span></div>
+        <div class="node db critical" style="left:690px;top:160px;"><b>MySQL order_main</b><span>连接池 184/200</span></div>
+        <div class="node restricted" style="left:690px;top:300px;"><b>未授权依赖 x2</b><span>仅显示聚合风险</span></div>
+        <svg class="edges" viewBox="0 0 980 430" aria-hidden="true">
+          <path class="edge edge-critical" d="M220 150 C280 130 310 120 360 128"/>
+          <path class="edge edge-error" d="M220 270 C282 260 310 258 360 270"/>
+          <path class="edge edge-critical" d="M540 128 C610 130 645 160 690 192"/>
+          <path class="edge edge-error" d="M540 270 C610 260 645 238 690 212"/>
+          <path class="edge edge-muted" d="M220 270 C430 340 560 342 690 332"/>
+        </svg>
+      </div>
+      <div class="footer-line">拓扑线颜色表达最高风险级别；节点内同时展示状态文案，避免只依赖颜色判读。</div>
+    </section>
+
+    <section id="alert-linkage" class="board">
+      <div class="page-head">
+        <div>
+          <div class="breadcrumb">告警中心 / 指标联动 / ALM-20260426-032</div>
+          <h2>告警与指标联动 <span class="tag p0">P0 紧急</span> <span class="tag info">已通知</span></h2>
+          <p>Kafka Lag、数据库连接池、应用错误率在同一触发窗口联动展示。</p>
+        </div>
+        <div class="actions"><button class="btn primary">确认告警</button><button class="btn ghost">标记处理中</button><button class="btn ghost">转派</button><button class="btn danger">关闭</button></div>
+      </div>
+      <div class="notice info">来源：中间件详情 / kafka-prod-a / order-event / 触发窗口 10:00-10:30 <a>返回中间件详情</a> <a>清除来源</a></div>
+      <div class="linkage-grid">
+        <div class="panel">
+          <div class="panel-head"><strong>触发指标</strong><span>kafka.consumer_lag / 阈值 80k</span></div>
+          <div class="mini-chart critical-chart"></div>
+          <div class="metric-line"><span>当前值</span><b class="critical-text">128,420</b><span>持续 26m</span></div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><strong>关联指标</strong><span>db.active_connection / 阈值 160</span></div>
+          <div class="mini-chart error-chart"></div>
+          <div class="metric-line"><span>当前值</span><b class="error-text">184 / 200</b><span>慢 SQL 32</span></div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><strong>应用症状</strong><span>http_5xx_rate / 阈值 3%</span></div>
+          <div class="mini-chart app-chart"></div>
+          <div class="metric-line"><span>当前值</span><b class="critical-text">6.2%</b><span>Trace 342</span></div>
+        </div>
+      </div>
+      <div class="split-row">
+        <div class="panel">
+          <div class="panel-head"><strong>处理时间线</strong><span>失败通知保留重试入口</span></div>
+          <div class="timeline">
+            <div><b>10:04:12 触发</b><span>Lag 连续 5 次超过 80k，生成 ALM-20260426-032。</span></div>
+            <div><b>10:04:18 通知部分失败</b><span>企业微信成功，短信失败：运营商超时。<a>重试</a></span></div>
+            <div><b>10:08:51 自动关联</b><span>order_main 连接池达到 184/200，order-api 5xx 同窗升高。</span></div>
+            <div><b>10:16:32 已升级</b><span>升级到 SRE 二线，审计 AUD-20260426-0092。</span></div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><strong>证据与操作约束</strong><span>权限矩阵落点</span></div>
+          <div class="rule-list">
+            <div><span class="tag p0">P0 紧急</span><b>主动作：确认告警</b><small>处理失败状态不跳转，保留原生命周期。</small></div>
+            <div><span class="tag restricted">脱敏</span><b>生产库连接与 SQL 参数默认脱敏</b><small>明文查看需审批并生成审计。</small></div>
+            <div><span class="tag warning">导出受控</span><b>指标点数 12,480，导出走后台任务</b><small>任务完成后 24 小时内下载。</small></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="exports" class="board">
+      <div class="page-head">
+        <div><div class="breadcrumb">导出与审计 / 中间件数据库</div><h2>导出任务与审计提示</h2><p>生产、敏感字段、超量指标点触发二次确认或后台任务。</p></div>
+      </div>
+      <div class="export-confirm">
+        <div>
+          <strong>生产指标导出确认</strong>
+          <p>范围：order-event、order_main、order-api / 生产 / 10:00-10:30。包含 12,480 指标点、32 条慢 SQL 摘要，连接地址与 SQL 参数脱敏。</p>
+        </div>
+        <div class="actions"><button class="btn ghost">取消</button><button class="btn primary">创建导出任务</button></div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>任务 ID</th><th>内容</th><th>状态</th><th>脱敏策略</th><th>审计编号</th><th>创建人</th><th>有效期</th><th>操作</th></tr></thead>
+          <tbody>
+            <tr><td>EXP-20260426-018</td><td>Kafka + MySQL 指标联动</td><td><span class="tag info">处理中</span></td><td>连接、SQL 参数、联系方式脱敏</td><td>AUD-20260426-0098</td><td>张伟</td><td>生成后 24h</td><td><a>查看进度</a></td></tr>
+            <tr><td>EXP-20260426-011</td><td>中间件列表当前筛选</td><td><span class="tag ok">成功</span></td><td>未授权对象不导出</td><td>AUD-20260426-0081</td><td>李岩</td><td>17h 42m</td><td><a>下载</a><a>审计</a></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

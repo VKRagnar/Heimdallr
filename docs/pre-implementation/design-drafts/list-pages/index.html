@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>统一监控平台 - 列表查询与状态页高保真</title>
+  <link rel="stylesheet" href="./list-pages.css">
+</head>
+<body>
+  <aside class="sidebar">
+    <div class="brand">
+      <span class="brand-mark">M</span>
+      <span>统一监控平台</span>
+    </div>
+    <nav class="nav-list" aria-label="主导航">
+      <a href="#apps" class="active"><span class="ico">▦</span>应用监控</a>
+      <a href="#servers"><span class="ico">▤</span>服务器监控</a>
+      <a href="#alerts"><span class="ico">△</span>告警中心</a>
+      <a href="#metrics"><span class="ico">⌁</span>指标中心</a>
+      <a href="#logs"><span class="ico">☰</span>日志中心</a>
+      <a href="#notifications"><span class="ico">◉</span>通知与值班</a>
+      <a href="#exports"><span class="ico">⇩</span>导出任务</a>
+      <a href="#states"><span class="ico">◌</span>通用状态</a>
+    </nav>
+    <div class="side-note">
+      <div class="tiny-label">授权范围</div>
+      <strong>36 个应用 / 128 台关联主机</strong>
+      <span>生产环境需二次确认与审计</span>
+    </div>
+  </aside>
+
+  <header class="topbar">
+    <div class="global-search">搜索应用、服务器、告警 ID、Trace ID</div>
+    <div class="topbar-actions">
+      <span class="env-pill">生产</span>
+      <span class="refresh-dot">自动刷新 30s</span>
+      <span class="time">更新于 10:31:20</span>
+      <span class="avatar">张</span>
+    </div>
+  </header>
+
+  <main class="workspace">
+    <section class="cover board">
+      <div>
+        <div class="breadcrumb">UI 高保真 / 列表查询与状态页</div>
+        <h1>企业级统一监控平台列表查询与状态页</h1>
+        <p>静态评审稿覆盖应用列表、服务器列表、告警列表、指标查询、通知记录、日志查询补充态、通用状态页和导出任务状态。所有统计、筛选、表格和导出任务默认按应用授权过滤。</p>
+      </div>
+      <div class="cover-grid">
+        <div><strong>P0/P1 优先</strong><span>风险排序、处理入口、证据跳转</span></div>
+        <div><strong>权限不泄露</strong><span>未授权对象不出现在计数与下拉</span></div>
+        <div><strong>数据可信</strong><span>数据源异常、最近成功采集时间可见</span></div>
+        <div><strong>导出受控</strong><span>生产、日志、敏感字段与超量任务审计</span></div>
+      </div>
+    </section>
+
+    <section id="apps" class="board">
+      <div class="page-head">
+        <div>
+          <div class="breadcrumb">应用监控 / 应用列表</div>
+          <h2>应用列表</h2>
+          <p>授权应用 36 个 / 生产 18 个 / 更新于 10:31:20</p>
+        </div>
+        <div class="actions">
+          <button class="btn ghost">刷新</button>
+          <button class="btn ghost">保存视图</button>
+          <button class="btn disabled" title="当前角色暂无导出权限">导出</button>
+        </div>
+      </div>
+      <div class="filter-bar">
+        <div class="field wide">应用名称/编码 <b>order-api</b></div>
+        <div class="field">环境 <b>生产</b></div>
+        <div class="field">运行状态 <b>全部</b></div>
+        <div class="field">负责人 <b>我负责</b></div>
+        <div class="field">接入状态 <b>全部</b></div>
+        <button class="btn primary">查询</button>
+        <button class="btn ghost">重置</button>
+      </div>
+      <div class="notice warn"><strong>数据质量：</strong>Prometheus 延迟 6 分钟，2 个应用展示最近成功采集数据。最近成功时间 10:25:04。</div>
+      <div class="summary-strip">
+        <span>全部 <b>36</b></span><span class="ok">正常 28</span><span class="warn-text">预警 4</span><span class="error-text">异常 3</span><span class="critical-text">严重 1</span><span>未接入 5</span><span>数据延迟 2</span>
+      </div>
+      <div class="batch-bar">已选 3 项 <button>批量查看告警</button><button class="disabled">批量导出</button><button>添加到关注</button><span>导出需 export:list 权限，生产环境将记录审计。</span></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>应用名称</th><th>环境</th><th>负责人</th><th>运行状态</th><th>实例</th><th>接入状态</th><th>错误率</th><th>P95</th><th>当前告警</th><th>更新时间</th><th>操作</th></tr></thead>
+          <tbody>
+            <tr class="risk-critical"><td><strong>order-api</strong><small>APP-1008 / 交易域</small></td><td><span class="tag prod">生产</span></td><td>陈静</td><td><span class="tag critical">严重</span></td><td>7/9</td><td><span class="tag error">指标采集异常</span><span class="tag info">日志已接入</span></td><td class="critical-text">6.2%</td><td>428ms</td><td><span class="tag p0">P0 紧急 1</span></td><td>10:25:04</td><td><a>详情</a><a>日志</a><a>指标</a><a>告警</a></td></tr>
+            <tr><td><strong>pay-gateway</strong><small>APP-1019 / 支付域</small></td><td><span class="tag prod">生产</span></td><td>李岩</td><td><span class="tag error">异常</span></td><td>12/12</td><td><span class="tag ok">已接入</span></td><td class="error-text">2.4%</td><td>260ms</td><td><span class="tag p1">P1 严重 2</span></td><td>10:31:12</td><td><a>详情</a><a>日志</a><a>指标</a><a>更多</a></td></tr>
+            <tr><td><strong>inventory-worker</strong><small>APP-1036 / 供应链</small></td><td><span class="tag">预发</span></td><td>王珂</td><td><span class="tag warning">预警</span></td><td>5/5</td><td><span class="tag warning">仅日志</span></td><td>0.6%</td><td>118ms</td><td><span class="tag p2">P2 一般 1</span></td><td>10:30:49</td><td><a>详情</a><a>日志</a><a class="muted">指标</a><a>告警</a></td></tr>
+            <tr><td><strong>coupon-admin</strong><small>APP-1044 / 营销域</small></td><td><span class="tag">测试</span></td><td>赵敏</td><td><span class="tag unknown">未知</span></td><td>-</td><td><span class="tag restricted">未接入</span></td><td>-</td><td>-</td><td>无</td><td>--</td><td><a>详情</a><a>接入指引</a></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="footer-line">每页 20 条 / 查询耗时 0.42s / 未授权应用不会出现在搜索、统计、表格和导出结果中。</div>
+    </section>
+
+    <section id="servers" class="board">
+      <div class="page-head">
+        <div><div class="breadcrumb">服务器监控 / 服务器列表</div><h2>服务器列表</h2><p>授权关联主机 128 台 / Agent 离线 4 台</p></div>
+        <div class="actions"><button class="btn ghost">刷新</button><button class="btn ghost">保存视图</button><button class="btn ghost">导出</button></div>
+      </div>
+      <div class="filter-bar">
+        <div class="field wide">主机名/IP <b>10.20.8.*</b></div><div class="field">环境 <b>生产</b></div><div class="field">区域 <b>华东 2</b></div><div class="field">状态 <b>异常/严重</b></div><div class="field">Agent <b>全部</b></div><button class="btn primary">查询</button><button class="btn ghost">高级筛选</button>
+      </div>
+      <div class="notice danger"><strong>Agent 异常：</strong>4 台主机心跳超过 10 分钟未上报，资源指标展示最近成功采集值。</div>
+      <div class="summary-strip">
+        <span>全部 <b>128</b></span><span class="ok">正常 102</span><span class="warn-text">预警 16</span><span class="error-text">异常 8</span><span class="critical-text">严重 2</span><span>Agent 离线 4</span>
+      </div>
+      <div class="segment"><button class="active">全部</button><button>按业务线</button><button>按应用</button><button>按环境</button><button>按区域</button></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>主机名</th><th>IP</th><th>环境</th><th>CPU</th><th>内存</th><th>磁盘</th><th>Agent</th><th>部署应用</th><th>当前告警</th><th>状态</th><th>操作</th></tr></thead>
+          <tbody>
+            <tr class="risk-critical"><td><strong>prod-pay-08</strong><small>华东 2 / 可用区 C</small></td><td>10.20.8.18</td><td><span class="tag prod">生产</span></td><td class="critical-text">92%</td><td>81%</td><td>74%</td><td><span class="tag error">离线 12m</span></td><td>order-api +2 / 其他应用已隐藏</td><td><span class="tag p0">P0 1</span></td><td><span class="tag critical">严重</span></td><td><a>指标</a><a>告警</a><a>关联应用</a></td></tr>
+            <tr><td><strong>prod-order-12</strong><small>华东 2 / 可用区 A</small></td><td>10.20.9.45</td><td><span class="tag prod">生产</span></td><td>68%</td><td class="warn-text">78%</td><td>63%</td><td><span class="tag ok">在线</span></td><td>order-api</td><td><span class="tag p1">P1 1</span></td><td><span class="tag error">异常</span></td><td><a>详情</a><a>指标</a><a>更多</a></td></tr>
+            <tr><td><strong>stage-stock-03</strong><small>华北 1 / 机房 B</small></td><td>10.33.4.10</td><td><span class="tag">预发</span></td><td>41%</td><td>49%</td><td>56%</td><td><span class="tag warning">版本过低</span></td><td>inventory-worker</td><td>无</td><td><span class="tag warning">预警</span></td><td><a>Agent</a><a>指标</a></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="footer-line">导出生产服务器 IP 清单需二次确认；未授权应用名称、端口和进程不展示。</div>
+    </section>
+
+    <section id="alerts" class="board">
+      <div class="page-head">
+        <div><div class="breadcrumb">告警中心 / 告警列表</div><h2>告警列表</h2><p>默认未恢复优先 / P0 与未确认置顶</p></div>
+        <div class="actions"><button class="btn ghost">刷新</button><button class="btn ghost">保存查询</button><button class="btn ghost">导出</button></div>
+      </div>
+      <div class="filter-bar">
+        <div class="chips"><span class="chip selected">P0</span><span class="chip selected">P1</span><span class="chip">P2</span><span class="chip">P3</span></div>
+        <div class="field">状态 <b>未恢复</b></div><div class="field wide">应用/服务器 <b>授权范围</b></div><div class="field">负责人 <b>我负责</b></div><div class="field">时间 <b>最近 24 小时</b></div><button class="btn primary">查询</button>
+      </div>
+      <div class="summary-strip"><span>未恢复 <b>18</b></span><span>未确认 10</span><span>处理中 4</span><span>已升级 2</span><span class="critical-text">P0 1</span><span class="error-text">P1 7</span><span>通知失败 3</span></div>
+      <div class="batch-bar">已选 4 项 <button>批量确认</button><button>批量标记处理中</button><button>批量转派</button><button>批量导出</button><span>处理操作将生成 alert_ack / alert_start_processing 审计事件。</span></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>级别</th><th>告警标题</th><th>状态</th><th>对象</th><th>触发值/当前值</th><th>环境</th><th>负责人</th><th>通知</th><th>持续</th><th>升级</th><th>操作</th></tr></thead>
+          <tbody>
+            <tr class="risk-critical"><td><span class="tag p0">P0 紧急</span></td><td><strong>交易下单接口 5xx 激增</strong><small>ALM-20260426-001</small></td><td><span class="tag info">已通知</span></td><td>order-api / /api/order</td><td><b class="critical-text">6.2%</b> / 5.8%</td><td><span class="tag prod">生产</span></td><td>陈静</td><td><span class="tag error">短信失败</span></td><td>26m</td><td>是 / SRE 二线</td><td><a>确认</a><a>日志</a><a>指标</a><a>转派</a></td></tr>
+            <tr><td><span class="tag p1">P1 严重</span></td><td><strong>支付网关 P95 超阈值</strong><small>ALM-20260426-009</small></td><td><span class="tag warning">处理中</span></td><td>pay-gateway</td><td><b class="error-text">820ms</b> / 760ms</td><td><span class="tag prod">生产</span></td><td>李岩</td><td><span class="tag ok">企业微信成功</span></td><td>43m</td><td>否</td><td><a>备注</a><a>日志</a><a>指标</a></td></tr>
+            <tr><td><span class="tag p2">P2 一般</span></td><td><strong>库存同步延迟</strong><small>ALM-20260426-016</small></td><td><span class="tag info">已确认</span></td><td>inventory-worker</td><td>7.5s / 6.9s</td><td><span class="tag">预发</span></td><td>王珂</td><td><span class="tag warning">部分失败</span></td><td>1h 12m</td><td>否</td><td><a>处理</a><a>通知</a><a>更多</a></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="metrics" class="board">
+      <div class="page-head">
+        <div><div class="breadcrumb">指标中心 / 指标查询</div><h2>指标查询</h2><p>对象、指标、时间范围连续带入；图表包含阈值线和告警点</p></div>
+        <div class="actions"><button class="btn ghost">保存查询</button><button class="btn ghost">创建告警规则</button><button class="btn ghost">导出图表</button></div>
+      </div>
+      <div class="notice info">来源：告警 ALM-20260426-001 / order-api / 生产 / 触发窗口 10:00-10:30 <a>返回告警</a> <a>清除来源</a></div>
+      <div class="filter-bar">
+        <div class="field wide">对象 <b>order-api / prod-pay-08</b></div><div class="field">指标 <b>http_5xx_rate</b></div><div class="field">聚合 <b>P95</b></div><div class="field">时间 <b>最近 6 小时</b></div><button class="btn primary">查询</button><button class="btn ghost">对比</button>
+      </div>
+      <div class="metric-grid">
+        <div class="metric-card"><span>当前值</span><strong class="critical-text">5.8%</strong><small>阈值 3.0%</small></div>
+        <div class="metric-card"><span>最大值</span><strong>6.4%</strong><small>10:18:00</small></div>
+        <div class="metric-card"><span>平均值</span><strong>2.1%</strong><small>6h 窗口</small></div>
+        <div class="metric-card"><span>P95</span><strong>428ms</strong><small>采样粒度 1m</small></div>
+      </div>
+      <div class="chart-panel">
+        <div class="chart-head"><strong>http_5xx_rate 趋势</strong><span>Prometheus 延迟 6 分钟 / 最近成功 10:25:04</span></div>
+        <div class="chart">
+          <div class="threshold"></div>
+          <div class="line line-main"></div>
+          <div class="line line-alt"></div>
+          <span class="point p0-point">P0</span>
+          <span class="event-marker">发布 v2.8.1</span>
+        </div>
+        <div class="legend"><span class="legend-main">当前服务</span><span class="legend-alt">上周同窗</span><span class="legend-threshold">阈值 3%</span><span>日志命中点 42</span></div>
+      </div>
+      <div class="split-row">
+        <div class="state-inline">
+          <strong>无指标数据示例</strong>
+          <p>当前条件下暂无指标数据。可扩大时间范围，或检查指标接入状态。</p>
+          <button class="btn primary">查看接入状态</button>
+        </div>
+        <div class="state-inline danger">
+          <strong>指标源异常示例</strong>
+          <p>Prometheus/Grafana 暂不可用，图表展示最近一次成功数据，采集时间 10:25:04。</p>
+          <button class="btn ghost">重试</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="notifications" class="board">
+      <div class="page-head">
+        <div><div class="breadcrumb">通知与值班 / 通知记录</div><h2>通知记录</h2><p>每个告警、渠道、接收人生成一条记录；联系方式默认脱敏</p></div>
+        <div class="actions"><button class="btn ghost">刷新</button><button class="btn ghost">导出</button></div>
+      </div>
+      <div class="filter-bar">
+        <div class="field wide">告警 ID/标题 <b>ALM-20260426-001</b></div><div class="field">渠道 <b>短信/企业微信</b></div><div class="field">发送状态 <b>失败/部分失败</b></div><div class="field">值班组 <b>支付值班组</b></div><div class="field">时间 <b>最近 24 小时</b></div><button class="btn primary">查询</button>
+      </div>
+      <div class="notice danger"><strong>通知记录源异常：</strong>当前展示最近一次同步数据，重试按钮已禁用。同步时间 10:28:11。</div>
+      <div class="summary-strip"><span>全部 860</span><span class="ok">成功 812</span><span class="error-text">失败 18</span><span>部分失败 9</span><span>待发送 12</span><span>重试中 9</span></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>通知时间</th><th>告警</th><th>级别</th><th>渠道</th><th>接收人</th><th>值班组</th><th>状态</th><th>失败原因</th><th>重试</th><th>审计编号</th><th>操作</th></tr></thead>
+          <tbody>
+            <tr><td>10:07:22</td><td><strong>ALM-20260426-001</strong><small>交易下单接口 5xx 激增</small></td><td><span class="tag p0">P0</span></td><td>短信</td><td>陈静 / 138****2048</td><td>支付值班组</td><td><span class="tag error">发送失败</span></td><td>短信网关超时</td><td>2</td><td>AUD-20260426-118</td><td><a class="muted">重试</a><a>详情</a></td></tr>
+            <tr><td>10:07:24</td><td><strong>ALM-20260426-001</strong><small>交易下单接口 5xx 激增</small></td><td><span class="tag p0">P0</span></td><td>电话</td><td>李岩 / 186****7701</td><td>支付值班组</td><td><span class="tag ok">成功</span></td><td>-</td><td>0</td><td>AUD-20260426-119</td><td><a>详情</a><a>查看告警</a></td></tr>
+            <tr><td>09:52:10</td><td><strong>ALM-20260426-016</strong><small>库存同步延迟</small></td><td><span class="tag p2">P2</span></td><td>企业微信</td><td>王珂 / wang***@corp</td><td>供应链值班组</td><td><span class="tag warning">部分失败</span></td><td>备份联系人缺失</td><td>1</td><td>AUD-20260426-102</td><td><a>详情</a><a>渠道</a></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="logs" class="board">
+      <div class="page-head">
+        <div><div class="breadcrumb">日志中心 / 日志查询补充态</div><h2>日志查询补充态</h2><p>错误聚合、上下文、堆栈、脱敏和受控导出</p></div>
+        <div class="actions"><button class="btn ghost">保存查询</button><button class="btn disabled">导出</button><button class="btn ghost">清空</button></div>
+      </div>
+      <div class="notice info">来源：告警 ALM-20260426-001 / order-api / 生产 / 触发窗口 10:00-10:30 / 默认 ERROR <a>返回告警</a></div>
+      <div class="filter-bar">
+        <div class="field">应用 <b>order-api</b></div><div class="field">实例 <b>prod-pay-08</b></div><div class="field">级别 <b>ERROR</b></div><div class="field wide">Trace ID <b>trace-a1b2...f89c</b></div><div class="field">时间 <b>前后 30 分钟</b></div><button class="btn primary">查询</button>
+      </div>
+      <div class="log-layout">
+        <aside class="log-side">
+          <h3>错误聚合</h3>
+          <div class="agg active"><strong>NullPointerException</strong><span>230 次 / 42 Trace / 关联 P0</span></div>
+          <div class="agg"><strong>Timeout waiting pool</strong><span>88 次 / 12 Trace</span></div>
+          <div class="agg"><strong>字段分布失败</strong><span class="error-text">日志源局部异常</span></div>
+        </aside>
+        <div class="log-main">
+          <div class="summary-strip compact"><span>命中 12,380</span><span class="critical-text">ERROR 230</span><span>WARN 510</span><span>查询耗时 3.2s</span><span>数据延迟 15s</span></div>
+          <div class="notice warn">部分敏感字段已脱敏展示，明文查看需要额外权限并记录审计。</div>
+          <div class="log-row error"><span>10:06:58.234</span><b>ERROR</b><code>trace-a1b2...f89c</code><p>OrderSubmitService submit failed, userPhone=138****0000, token=******, <mark>NullPointerException</mark></p><a>上下文</a></div>
+          <div class="log-row warn"><span>10:06:59.014</span><b>WARN</b><code>trace-a1b2...f89c</code><p>retry payment callback timeout, requestId=req-7c1...90d</p><a>看指标</a></div>
+          <div class="context-drawer">
+            <div><strong>上下文抽屉</strong><span>默认前后各 50 行，可切换 10 / 20 / 50</span></div>
+            <pre>Caused by: java.lang.NullPointerException
+  at com.corp.order.SubmitService.createOrder(SubmitService.java:218)
+  at com.corp.order.ApiController.submit(ApiController.java:76)</pre>
+          </div>
+        </div>
+      </div>
+      <div class="split-row">
+        <div class="state-inline"><strong>无命中日志</strong><p>当前条件下未命中日志。请扩大时间范围，或检查应用、实例和关键字。</p><button class="btn primary">扩大时间范围</button></div>
+        <div class="state-inline danger"><strong>查询超时</strong><p>日志查询超时，请缩小时间范围或增加应用/实例条件。</p><button class="btn ghost">缩小范围</button></div>
+      </div>
+    </section>
+
+    <section id="states" class="board">
+      <div class="page-head">
+        <div><div class="breadcrumb">通用状态页</div><h2>状态页与嵌入空态</h2><p>空、加载、异常、无权限、未接入和敏感字段受限统一文案</p></div>
+      </div>
+      <div class="state-grid">
+        <div class="state-card"><span class="state-icon">⌕</span><h3>未找到符合条件的数据</h3><p>请调整筛选条件，或重置后重新查询。</p><button class="btn primary">重置筛选</button></div>
+        <div class="state-card restricted"><span class="state-icon">⌧</span><h3>暂无可查看数据</h3><p>当前账号没有授权应用，因此无法查看关联日志、指标、告警和服务器。</p><button class="btn primary">申请应用权限</button></div>
+        <div class="state-card"><span class="state-icon">↯</span><h3>暂无监控数据</h3><p>对象尚未接入对应数据源，状态可能不完整。</p><button class="btn primary">查看接入指引</button></div>
+        <div class="state-card danger"><span class="state-icon">!</span><h3>数据源暂不可用</h3><p>已展示最近一次成功数据时，请以采集时间 10:25:04 为准。</p><button class="btn ghost">重试</button></div>
+        <div class="state-card"><span class="state-icon loading"></span><h3>正在加载数据</h3><p>请稍候，复杂查询可能需要几秒。加载中不展示 0 值。</p><div class="skeleton"></div></div>
+        <div class="state-card restricted"><span class="state-icon">•••</span><h3>字段已脱敏展示</h3><p>明文查看需要额外权限并记录审计。</p><button class="btn primary">申请明文权限</button></div>
+      </div>
+    </section>
+
+    <section id="exports" class="board">
+      <div class="page-head">
+        <div><div class="breadcrumb">系统管理 / 导出任务</div><h2>导出任务状态</h2><p>后台任务、二次确认、失败重试、过期下载与审计编号</p></div>
+        <div class="actions"><button class="btn ghost">刷新</button></div>
+      </div>
+      <div class="filter-bar">
+        <div class="field wide">任务名称/审计编号 <b>AUD-20260426</b></div><div class="field">来源页面 <b>全部</b></div><div class="field">状态 <b>处理中/失败</b></div><div class="field">创建人 <b>我创建</b></div><div class="field">时间 <b>最近 7 天</b></div><button class="btn primary">查询</button>
+      </div>
+      <div class="summary-strip"><span>全部 48</span><span>排队中 3</span><span>处理中 5</span><span class="ok">成功 32</span><span class="error-text">失败 4</span><span>已过期 4</span></div>
+      <div class="export-confirm">
+        <div><strong>待确认导出</strong><p>日志导出涉及生产环境、敏感字段和预估 12,600 行，将创建后台任务并使用默认脱敏策略。</p></div>
+        <div class="confirm-meta"><span>应用：order-api</span><span>环境：生产</span><span>时间：10:00-10:30</span><span>审计：创建后生成</span></div>
+        <button class="btn primary">确认导出</button>
+        <button class="btn ghost">取消</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>任务名称</th><th>来源页面</th><th>导出范围</th><th>数据量</th><th>脱敏策略</th><th>状态</th><th>创建人</th><th>下载有效期</th><th>审计编号</th><th>操作</th></tr></thead>
+          <tbody>
+            <tr><td><strong>日志明细导出</strong><small>EXP-20260426-081</small></td><td>日志查询</td><td>order-api / 生产 / 30m</td><td>12,600 行</td><td><span class="tag restricted">默认脱敏</span></td><td><span class="progress"><i style="width:58%"></i></span><span class="tag info">处理中</span></td><td>陈静</td><td>-</td><td>AUD-20260426-211</td><td><a>详情</a><a>取消</a></td></tr>
+            <tr><td><strong>告警列表导出</strong><small>EXP-20260426-073</small></td><td>告警列表</td><td>P0/P1 未恢复</td><td>86 行</td><td><span class="tag ok">无敏感字段</span></td><td><span class="tag ok">成功</span></td><td>李岩</td><td>明日 10:16</td><td>AUD-20260426-188</td><td><a>下载</a><a>审计</a></td></tr>
+            <tr><td><strong>指标数据导出</strong><small>EXP-20260426-066</small></td><td>指标查询</td><td>pay-gateway / 7d</td><td>18,400 点</td><td><span class="tag restricted">字段排除</span></td><td><span class="tag error">失败</span></td><td>张敏</td><td>-</td><td>AUD-20260426-176</td><td><a>重试</a><a>详情</a></td></tr>
+            <tr><td><strong>通知记录导出</strong><small>EXP-20260425-041</small></td><td>通知记录</td><td>短信失败记录</td><td>1,204 行</td><td><span class="tag restricted">联系方式脱敏</span></td><td><span class="tag unknown">已过期</span></td><td>王珂</td><td>已过期</td><td>AUD-20260425-322</td><td><a>重新导出</a><a>审计</a></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="drawer-mock">
+        <h3>任务详情抽屉</h3>
+        <p>失败原因：Prometheus 查询超时。重试前将重新校验应用授权、数据源状态和脱敏策略。</p>
+        <div class="kv"><span>下载人</span><b>下载时再次校验</b><span>下载有效期</span><b>24 小时</b><span>审计事件</span><b>export_create / export_download</b></div>
+      </div>
+    </section>
+  </main>
+</body>
+</html>
