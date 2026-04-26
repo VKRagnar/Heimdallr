@@ -1,0 +1,9 @@
+spring:
+  application:
+    name: heimdallr-api
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus

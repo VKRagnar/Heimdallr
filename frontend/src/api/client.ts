@@ -14,7 +14,7 @@ export interface RequestOptions extends Omit<RequestInit, 'body'> {
 }
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '';
-const TOKEN_KEY = 'data-monitor-token';
+const TOKEN_KEY = 'heimdallr-token';
 
 function createRequestId() {
   if (globalThis.crypto?.randomUUID) {

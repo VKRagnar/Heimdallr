@@ -47,11 +47,11 @@ export function AppShell() {
     <Layout className="app-shell">
       <Sider width={232} className="app-sider">
         <div className="brand">
-          <div className="brand-mark">DM</div>
-          <div>
-            <Typography.Text strong>统一监控平台</Typography.Text>
-            <Typography.Text type="secondary">Data Monitor</Typography.Text>
-          </div>
+            <div className="brand-mark">H</div>
+            <div>
+              <Typography.Text strong>Heimdallr</Typography.Text>
+              <Typography.Text type="secondary">Monitor Console</Typography.Text>
+            </div>
         </div>
         <Menu
           mode="inline"

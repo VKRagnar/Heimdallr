@@ -1,9 +1,0 @@
-spring:
-  application:
-    name: data-monitor-api
-
-management:
-  endpoints:
-    web:
-      exposure:
-        include: health,info,metrics,prometheus

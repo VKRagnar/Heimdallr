@@ -5,8 +5,8 @@
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
-        <groupId>com.datamonitor</groupId>
-        <artifactId>data-monitor-backend</artifactId>
+        <groupId>com.heimdallr.monitor</groupId>
+        <artifactId>heimdallr-backend</artifactId>
         <version>0.1.0-SNAPSHOT</version>
     </parent>
 

@@ -1,4 +1,4 @@
-﻿# 企业级统一监控平台技术栈梳理与初步选型
+# 企业级Heimdallr技术栈梳理与初步选型
 
 ## 1. 结论摘要
 
@@ -139,7 +139,7 @@ OpenSearch 和 Loki 只作为未来兼容源，不作为一期主选型。
 
 告警检测、通知投递、导出任务不建议放在 HTTP 请求链路里同步执行。建议：
 
-1. `monitor-api`：HTTP API、权限、资产、规则、告警处理和审计查询。
+1. `heimdallr-api`：HTTP API、权限、资产、规则、告警处理和审计查询。
 2. `alert-worker`：周期性读取启用规则，查询 Prometheus/日志聚合，写入告警事件。
 3. `notification-worker`：消费通知任务，发送邮件，写通知记录和失败原因。
 4. `export-worker`：异步生成导出文件，执行脱敏、审计和过期清理。
@@ -152,11 +152,11 @@ OpenSearch 和 Loki 只作为未来兼容源，不作为一期主选型。
 当前 `project/` 原型目录可以删除。正式工程建议直接在仓库根目录建设 Java 后端和前端目录：
 
 ```text
-data-monitor/
+heimdallr-monitor/
   backend/
     settings.gradle.kts
     build.gradle.kts
-    monitor-api/
+    heimdallr-api/
     alert-worker/
     notification-worker/
     export-worker/

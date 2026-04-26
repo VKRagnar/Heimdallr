@@ -4,8 +4,8 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>com.datamonitor</groupId>
-    <artifactId>data-monitor-backend</artifactId>
+    <groupId>com.heimdallr.monitor</groupId>
+    <artifactId>heimdallr-backend</artifactId>
     <version>0.1.0-SNAPSHOT</version>
     <packaging>pom</packaging>
 
@@ -13,7 +13,7 @@
         <module>common-domain</module>
         <module>common-observability</module>
         <module>common-security</module>
-        <module>monitor-api</module>
+        <module>heimdallr-api</module>
     </modules>
 
     <properties>

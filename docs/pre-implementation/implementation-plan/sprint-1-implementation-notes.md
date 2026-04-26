@@ -59,7 +59,7 @@ Default connection values:
 | --- | --- |
 | PostgreSQL host | `localhost` |
 | PostgreSQL port | `5432` |
-| PostgreSQL database | `data_monitor` |
+| PostgreSQL database | `heimdallr_monitor` |
 | PostgreSQL user | `monitor` |
 | PostgreSQL password | `monitor_pass` |
 | Redis host | `localhost` |
@@ -74,7 +74,7 @@ Backend build and migration integration should follow the Maven multi-module pro
 ```properties
 spring.flyway.enabled=true
 spring.flyway.locations=filesystem:backend/db-migration
-spring.datasource.url=jdbc:postgresql://localhost:5432/data_monitor
+spring.datasource.url=jdbc:postgresql://localhost:5432/heimdallr_monitor
 spring.datasource.username=monitor
 spring.datasource.password=monitor_pass
 ```
@@ -82,7 +82,7 @@ spring.datasource.password=monitor_pass
 Manual validation with the Flyway CLI can use the same migration folder:
 
 ```bash
-flyway -url=jdbc:postgresql://localhost:5432/data_monitor -user=monitor -password=monitor_pass -locations=filesystem:backend/db-migration migrate
+flyway -url=jdbc:postgresql://localhost:5432/heimdallr_monitor -user=monitor -password=monitor_pass -locations=filesystem:backend/db-migration migrate
 ```
 
 ## 5. Import Samples
