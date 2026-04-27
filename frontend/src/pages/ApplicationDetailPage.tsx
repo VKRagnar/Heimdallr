@@ -1,10 +1,21 @@
-import { Card, Descriptions, List, Space } from 'antd';
+import { Button, Card, Descriptions, List, Space, Table } from 'antd';
+import type { ColumnsType } from 'antd/es/table';
 import { useQuery } from '@tanstack/react-query';
-import { useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { assetsApi } from '../api/services';
 import { ErrorState, LoadingState } from '../components/AppState';
 import { PageHeader } from '../components/PageHeader';
 import { StatusTag } from '../components/StatusTag';
+import type { AccessChannel } from '../types/domain';
+
+const accessColumns: ColumnsType<AccessChannel> = [
+  { title: '接入项', dataIndex: 'name' },
+  { title: '数据源', dataIndex: 'sourceName' },
+  { title: '状态', dataIndex: 'status', render: (value) => <StatusTag value={value} /> },
+  { title: '最近采集', dataIndex: 'lastSeenAt', render: (value) => value ?? '-' },
+  { title: '延迟', dataIndex: 'latencySeconds', render: (value) => value === undefined ? '-' : `${value}s` },
+  { title: '异常原因', dataIndex: 'failureReason', render: (value) => value ?? '-' },
+];
 
 export function ApplicationDetailPage() {
   const { appId = '' } = useParams();
@@ -15,7 +26,12 @@ export function ApplicationDetailPage() {
 
   return (
     <>
-      <PageHeader title={data.name} description={data.description} breadcrumb={['应用', data.name]} />
+      <PageHeader
+        title={data.name}
+        description={data.description}
+        breadcrumb={['应用', data.name]}
+        extra={<Space><Link to={`/logs/search?appId=${data.id}&env=${data.environment}&level=ERROR`}><Button>查看日志</Button></Link><Link to={`/metrics?objectType=application&objectId=${data.id}&env=${data.environment}&metricCodes=${data.defaultMetricCodes?.join(',') ?? 'error_rate,qps,p95_latency'}`}><Button type="primary">指标趋势</Button></Link></Space>}
+      />
       <Space direction="vertical" size={16} className="page-stack">
         <Card title="基础信息">
           <Descriptions column={{ xs: 1, md: 3 }}>
@@ -36,6 +52,9 @@ export function ApplicationDetailPage() {
               </List.Item>
             )}
           />
+        </Card>
+        <Card title="接入状态">
+          <Table rowKey="name" pagination={false} columns={accessColumns} dataSource={data.accessChannels} />
         </Card>
       </Space>
     </>

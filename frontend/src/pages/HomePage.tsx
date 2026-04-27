@@ -9,7 +9,7 @@ export function HomePage() {
     <>
       <PageHeader
         title="首页总览"
-        description="面向排障和值班的监控入口，Sprint 1 先接入权限范围与资产摘要。"
+        description="面向排障和值班的监控入口，Sprint 2 接入数据源、Agent、日志与指标联调状态。"
         breadcrumb={['首页']}
       />
       <Alert

@@ -3,6 +3,9 @@ import {
   AuditOutlined,
   DashboardOutlined,
   DatabaseOutlined,
+  DeploymentUnitOutlined,
+  FileSearchOutlined,
+  LineChartOutlined,
   SafetyCertificateOutlined,
   TeamOutlined,
   UserOutlined,
@@ -18,6 +21,18 @@ const navItems: MenuProps['items'] = [
   { key: '/home', icon: <DashboardOutlined />, label: <Link to="/home">首页</Link> },
   { key: '/applications', icon: <AppstoreOutlined />, label: <Link to="/applications">应用</Link> },
   { key: '/servers', icon: <DatabaseOutlined />, label: <Link to="/servers">服务器</Link> },
+  { key: '/logs/search', icon: <FileSearchOutlined />, label: <Link to="/logs/search">日志查询</Link> },
+  { key: '/metrics', icon: <LineChartOutlined />, label: <Link to="/metrics">指标查询</Link> },
+  {
+    key: 'access',
+    icon: <DeploymentUnitOutlined />,
+    label: '接入管理',
+    children: [
+      { key: '/access/applications', label: <Link to="/access/applications">应用接入</Link> },
+      { key: '/access/data-sources', label: <Link to="/access/data-sources">数据源</Link> },
+      { key: '/access/agents', label: <Link to="/access/agents">Agent</Link> },
+    ],
+  },
   {
     key: 'system',
     icon: <SafetyCertificateOutlined />,
@@ -32,6 +47,11 @@ const navItems: MenuProps['items'] = [
 
 function getSelectedKey(pathname: string) {
   if (pathname.startsWith('/applications/')) return '/applications';
+  if (pathname.startsWith('/logs/search')) return '/logs/search';
+  if (pathname.startsWith('/metrics')) return '/metrics';
+  if (pathname.startsWith('/access/applications')) return '/access/applications';
+  if (pathname.startsWith('/access/data-sources')) return '/access/data-sources';
+  if (pathname.startsWith('/access/agents')) return '/access/agents';
   if (pathname.startsWith('/system/users')) return '/system/users';
   if (pathname.startsWith('/system/roles')) return '/system/roles';
   if (pathname.startsWith('/system/audit-events')) return '/system/audit-events';
@@ -47,19 +67,13 @@ export function AppShell() {
     <Layout className="app-shell">
       <Sider width={232} className="app-sider">
         <div className="brand">
-            <div className="brand-mark">H</div>
-            <div>
-              <Typography.Text strong>Heimdallr</Typography.Text>
-              <Typography.Text type="secondary">Monitor Console</Typography.Text>
-            </div>
+          <div className="brand-mark">H</div>
+          <div>
+            <Typography.Text strong>Heimdallr</Typography.Text>
+            <Typography.Text type="secondary">Monitor Console</Typography.Text>
+          </div>
         </div>
-        <Menu
-          mode="inline"
-          theme="dark"
-          items={navItems}
-          selectedKeys={[getSelectedKey(location.pathname)]}
-          defaultOpenKeys={['system']}
-        />
+        <Menu mode="inline" theme="dark" items={navItems} selectedKeys={[getSelectedKey(location.pathname)]} defaultOpenKeys={['access', 'system']} />
       </Sider>
       <Layout>
         <Header className="app-header">

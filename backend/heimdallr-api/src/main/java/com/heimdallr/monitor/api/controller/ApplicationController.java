@@ -4,6 +4,7 @@ import com.heimdallr.monitor.api.fixture.InMemoryMonitorData;
 import com.heimdallr.monitor.common.domain.api.PageResult;
 import com.heimdallr.monitor.common.domain.model.ApplicationAsset;
 import com.heimdallr.monitor.common.domain.model.ApplicationInstance;
+import com.heimdallr.monitor.common.domain.model.MonitorObject;
 import com.heimdallr.monitor.common.security.RequestUserContext;
 import java.util.List;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -39,5 +40,12 @@ public class ApplicationController {
         var currentUser = RequestUserContext.requireCurrent();
         data.requirePermission(currentUser, "applications:read");
         return data.visibleInstances(id, currentUser);
+    }
+
+    @GetMapping("/{id}/dependencies")
+    public List<MonitorObject> dependencies(@PathVariable("id") String id) {
+        var currentUser = RequestUserContext.requireCurrent();
+        data.requirePermission(currentUser, "applications:read");
+        return data.visibleApplicationDependencies(id, currentUser);
     }
 }

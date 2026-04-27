@@ -102,6 +102,17 @@ body {
   margin-bottom: 16px;
 }
 
+.summary-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(140px, 1fr));
+  gap: 12px;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+}
+
 .filter-bar {
   display: flex;
   gap: 16px;
@@ -122,12 +133,31 @@ body {
   width: 160px;
 }
 
+.metric-select {
+  min-width: 300px;
+}
+
 .filter-extra {
   flex: 0 0 auto;
 }
 
 .page-stack {
   width: 100%;
+}
+
+.table-card {
+  margin-top: 16px;
+}
+
+.metric-stats {
+  margin: 8px 0 12px;
+}
+
+.metric-chart {
+  display: block;
+  width: 100%;
+  height: 132px;
+  overflow: visible;
 }
 
 .state-block {
@@ -173,5 +203,9 @@ body {
   .page-header {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .summary-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

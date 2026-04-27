@@ -88,7 +88,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
     return payload as T;
   }
 
-  if (payload.code && payload.code !== 'SUCCESS' && payload.success !== true) {
+  if (payload.code && !['SUCCESS', 'OK'].includes(payload.code) && payload.success !== true) {
     const code = normalizeErrorCode(payload.code, response.status);
     throw new ApiError(code, payload.message, response.status, payload.requestId ?? responseRequestId);
   }

@@ -15,7 +15,12 @@ public class TokenPrincipalService {
             "applications:read",
             "servers:read",
             "audit:read",
-            "access:read"
+            "access:read",
+            "data-sources:read",
+            "data-sources:write",
+            "agents:read",
+            "metrics:read",
+            "logs:read"
     );
 
     private final Map<String, CurrentUser> usersByToken = Map.of(
@@ -32,7 +37,7 @@ public class TokenPrincipalService {
                     "u-sre",
                     "sre",
                     "SRE Engineer",
-                    new RoleInfo("r-sre", "SRE", "SRE", Set.of("applications:read", "servers:read", "audit:read")),
+                    new RoleInfo("r-sre", "SRE", "SRE", Set.of("applications:read", "servers:read", "audit:read", "data-sources:read", "data-sources:write", "agents:read", "metrics:read", "logs:read")),
                     new DataScope(false, Set.of(), Set.of("core-platform"), Set.of("prod", "staging"))
             ),
             "ace-owner-token",
@@ -40,7 +45,7 @@ public class TokenPrincipalService {
                     "u-ace-owner",
                     "ace-owner",
                     "ACE Owner",
-                    new RoleInfo("r-app-owner", "APP_OWNER", "应用负责人", Set.of("applications:read", "servers:read")),
+                    new RoleInfo("r-app-owner", "APP_OWNER", "应用负责人", Set.of("applications:read", "servers:read", "agents:read", "metrics:read", "logs:read")),
                     new DataScope(false, Set.of("app-ace"), Set.of("trade"), Set.of("prod"))
             )
     );
