@@ -1,6 +1,6 @@
 package com.heimdallr.monitor.api.service;
 
-import com.heimdallr.monitor.api.fixture.InMemoryMonitorData;
+import com.heimdallr.monitor.api.repository.MonitorData;
 import com.heimdallr.monitor.common.domain.api.PageResult;
 import com.heimdallr.monitor.common.domain.model.DefaultMetricMapping;
 import com.heimdallr.monitor.common.domain.model.MetricDefinition;
@@ -11,9 +11,9 @@ import org.springframework.stereotype.Service;
 
 @Service
 public class MetricQueryService {
-    private final InMemoryMonitorData data;
+    private final MonitorData data;
 
-    public MetricQueryService(InMemoryMonitorData data) {
+    public MetricQueryService(MonitorData data) {
         this.data = data;
     }
 

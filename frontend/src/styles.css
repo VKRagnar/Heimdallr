@@ -133,6 +133,10 @@ body {
   width: 160px;
 }
 
+.full-width-control {
+  width: 100%;
+}
+
 .metric-select {
   min-width: 300px;
 }

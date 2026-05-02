@@ -1,5 +1,6 @@
 package com.heimdallr.monitor.api.fixture;
 
+import com.heimdallr.monitor.api.repository.MonitorData;
 import com.heimdallr.monitor.common.domain.api.ErrorCode;
 import com.heimdallr.monitor.common.domain.exception.ApiException;
 import com.heimdallr.monitor.common.domain.exception.ForbiddenException;
@@ -26,16 +27,21 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicInteger;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Repository;
 
 @Repository
-public class InMemoryMonitorData {
-    private final List<ApplicationAsset> applications = List.of(
+@Profile("!db")
+public class InMemoryMonitorData implements MonitorData {
+    private final List<ApplicationAsset> applications = new CopyOnWriteArrayList<>(List.of(
             new ApplicationAsset("app-ace", "ACE", "ACE Trading", "trade", "prod", List.of("u-ace-owner"), "CONNECTED"),
             new ApplicationAsset("app-ipro", "IPRO", "iPro Portal", "trade", "staging", List.of("u-sre"), "DEGRADED"),
             new ApplicationAsset("app-cms", "CMS", "Content Management", "content", "prod", List.of("u-cms-owner"), "CONNECTED"),
             new ApplicationAsset("app-grafana", "GRAFANA", "Grafana", "core-platform", "prod", List.of("u-sre"), "CONNECTED")
-    );
+    ));
 
     private final List<ApplicationInstance> instances = List.of(
             new ApplicationInstance("inst-ace-1", "app-ace", "srv-ace-1", "ace-api-01", "prod", "ONLINE"),
@@ -45,15 +51,15 @@ public class InMemoryMonitorData {
             new ApplicationInstance("inst-grafana-1", "app-grafana", "srv-grafana-1", "grafana-01", "prod", "ONLINE")
     );
 
-    private final List<ServerAsset> servers = List.of(
+    private final List<ServerAsset> servers = new CopyOnWriteArrayList<>(List.of(
             new ServerAsset("srv-ace-1", "ace-api-01", "10.10.1.11", "prod", Set.of("app-ace"), "CONNECTED"),
             new ServerAsset("srv-ace-2", "ace-api-02", "10.10.1.12", "prod", Set.of("app-ace"), "CONNECTED"),
             new ServerAsset("srv-ipro-1", "ipro-web-01", "10.10.2.21", "staging", Set.of("app-ipro"), "DEGRADED"),
             new ServerAsset("srv-cms-1", "cms-api-01", "10.10.3.31", "prod", Set.of("app-cms"), "CONNECTED"),
             new ServerAsset("srv-grafana-1", "grafana-01", "10.10.9.41", "prod", Set.of("app-grafana"), "CONNECTED")
-    );
+    ));
 
-    private final List<DataSourceConfig> dataSources = new java.util.concurrent.CopyOnWriteArrayList<>(List.of(
+    private final List<DataSourceConfig> dataSources = new CopyOnWriteArrayList<>(List.of(
             new DataSourceConfig("ds-prom-prod", "prometheus-prod", "PROMETHEUS", "prod", "https://prometheus.example.com", "/api/v1/query", "token", "secret/prometheus-prod-token", 5, 2, 20, "ENABLED", OffsetDateTime.now().minusMinutes(5), OffsetDateTime.now().minusMinutes(5), null, null),
             new DataSourceConfig("ds-grafana-prod", "grafana-prod", "GRAFANA", "prod", "https://grafana.example.com", "/api/health", "token", "secret/grafana-prod-token", 5, 1, 20, "ENABLED", OffsetDateTime.now().minusMinutes(5), OffsetDateTime.now().minusMinutes(5), null, null),
             new DataSourceConfig("ds-loki-prod", "loki-prod", "LOKI", "prod", "https://loki.example.com", "/loki/api/v1/query_range", "basic", "secret/loki-prod-basic", 8, 1, 10, "ENABLED", OffsetDateTime.now().minusMinutes(6), OffsetDateTime.now().minusMinutes(6), null, null),
@@ -109,14 +115,17 @@ public class InMemoryMonitorData {
             new LogEntry("log-004", OffsetDateTime.now().minusMinutes(5), "app-cms", "obj-redis-cms", "prod", "INFO", "Redis memory usage sample delayed", "trace-cms-001", "ds-loki-prod", Map.of("instance", "cms-redis"))
     );
 
-    private final List<AuditEvent> auditEvents = List.of(
+    private final List<AuditEvent> auditEvents = new CopyOnWriteArrayList<>(List.of(
             new AuditEvent("audit-001", "u-admin", "APPLICATION_VIEW", "APPLICATION", "app-ace", "SUCCESS", OffsetDateTime.now().minusHours(3)),
             new AuditEvent("audit-002", "u-sre", "SERVER_LIST", "SERVER", "*", "SUCCESS", OffsetDateTime.now().minusHours(2)),
             new AuditEvent("audit-003", "u-ace-owner", "ME_VIEW", "USER", "u-ace-owner", "SUCCESS", OffsetDateTime.now().minusHours(1))
-    );
+    ));
+    private final AtomicInteger auditSequence = new AtomicInteger(3);
+    private final Map<String, Set<String>> applicationGrantsByUser = new ConcurrentHashMap<>();
+    private final Map<String, Set<String>> businessLineGrantsByUser = new ConcurrentHashMap<>();
 
     private final List<RoleInfo> roles = List.of(
-            new RoleInfo("r-admin", "PLATFORM_ADMIN", "平台管理员", Set.of("applications:read", "servers:read", "audit:read", "access:read", "data-sources:read", "data-sources:write", "agents:read", "metrics:read", "logs:read")),
+            new RoleInfo("r-admin", "PLATFORM_ADMIN", "平台管理员", Set.of("applications:read", "applications:write", "servers:read", "servers:write", "audit:read", "access:read", "access:write", "data-sources:read", "data-sources:write", "agents:read", "metrics:read", "logs:read")),
             new RoleInfo("r-sre", "SRE", "SRE", Set.of("applications:read", "servers:read", "audit:read", "data-sources:read", "data-sources:write", "agents:read", "metrics:read", "logs:read")),
             new RoleInfo("r-app-owner", "APP_OWNER", "应用负责人", Set.of("applications:read", "servers:read", "agents:read", "metrics:read", "logs:read"))
     );
@@ -129,7 +138,7 @@ public class InMemoryMonitorData {
 
     public List<ApplicationAsset> visibleApplications(CurrentUser currentUser) {
         return applications.stream()
-                .filter(currentUser.dataScope()::canAccessApplication)
+                .filter(application -> canAccessApplication(currentUser, application))
                 .sorted(Comparator.comparing(ApplicationAsset::id))
                 .toList();
     }
@@ -137,9 +146,39 @@ public class InMemoryMonitorData {
     public ApplicationAsset requireVisibleApplication(String id, CurrentUser currentUser) {
         return applications.stream()
                 .filter(application -> application.id().equals(id))
-                .filter(currentUser.dataScope()::canAccessApplication)
+                .filter(application -> canAccessApplication(currentUser, application))
                 .findFirst()
                 .orElseThrow(() -> new NotFoundException("Application not found"));
+    }
+
+    public synchronized ApplicationAsset saveApplication(ApplicationAsset application, CurrentUser currentUser) {
+        requirePermission(currentUser, "applications:write");
+        if (!currentUser.dataScope().canAccessEnvironment(application.environment())) {
+            throw new ForbiddenException(ErrorCode.ENV_FORBIDDEN, "Environment is outside current user scope");
+        }
+        String id = application.id() == null || application.id().isBlank()
+                ? "app-custom-" + (applications.size() + 1)
+                : application.id();
+        ApplicationAsset saved = new ApplicationAsset(
+                id,
+                application.code(),
+                application.name(),
+                application.businessLine(),
+                application.environment(),
+                application.ownerUserIds() == null ? List.of() : List.copyOf(application.ownerUserIds()),
+                application.accessStatus() == null || application.accessStatus().isBlank() ? "CONNECTED" : application.accessStatus()
+        );
+        applications.removeIf(item -> item.id().equals(saved.id()));
+        applications.add(saved);
+        appendAudit(currentUser, "APPLICATION_UPSERT", "APPLICATION", saved.id(), "SUCCESS");
+        return saved;
+    }
+
+    public synchronized List<ApplicationAsset> importApplications(List<ApplicationAsset> imports, CurrentUser currentUser) {
+        requirePermission(currentUser, "applications:write");
+        return imports.stream()
+                .map(application -> saveApplication(application, currentUser))
+                .toList();
     }
 
     public List<ApplicationInstance> visibleInstances(String applicationId, CurrentUser currentUser) {
@@ -185,8 +224,39 @@ public class InMemoryMonitorData {
                 .collect(java.util.stream.Collectors.toSet());
         return servers.stream()
                 .filter(server -> server.applicationIds().stream().anyMatch(visibleApplicationIds::contains))
-                .filter(server -> currentUser.dataScope().canAccessEnvironment(server.environment()))
+                .filter(server -> currentUser.dataScope().canAccessEnvironment(server.environment()) || hasExplicitApplicationGrant(currentUser, server.applicationIds()))
                 .sorted(Comparator.comparing(ServerAsset::id))
+                .toList();
+    }
+
+    public synchronized ServerAsset saveServer(ServerAsset server, CurrentUser currentUser) {
+        requirePermission(currentUser, "servers:write");
+        if (!currentUser.dataScope().canAccessEnvironment(server.environment())) {
+            throw new ForbiddenException(ErrorCode.ENV_FORBIDDEN, "Environment is outside current user scope");
+        }
+        Set<String> applicationIds = server.applicationIds() == null ? Set.of() : Set.copyOf(server.applicationIds());
+        applicationIds.forEach(this::requireExistingApplication);
+        String id = server.id() == null || server.id().isBlank()
+                ? "srv-custom-" + (servers.size() + 1)
+                : server.id();
+        ServerAsset saved = new ServerAsset(
+                id,
+                server.hostname(),
+                server.ip(),
+                server.environment(),
+                applicationIds,
+                server.accessStatus() == null || server.accessStatus().isBlank() ? "CONNECTED" : server.accessStatus()
+        );
+        servers.removeIf(item -> item.id().equals(saved.id()));
+        servers.add(saved);
+        appendAudit(currentUser, "SERVER_UPSERT", "SERVER", saved.id(), "SUCCESS");
+        return saved;
+    }
+
+    public synchronized List<ServerAsset> importServers(List<ServerAsset> imports, CurrentUser currentUser) {
+        requirePermission(currentUser, "servers:write");
+        return imports.stream()
+                .map(server -> saveServer(server, currentUser))
                 .toList();
     }
 
@@ -357,12 +427,16 @@ public class InMemoryMonitorData {
 
     public List<AuditEvent> auditEvents(CurrentUser currentUser) {
         requirePermission(currentUser, "audit:read");
-        return auditEvents;
+        return auditEvents.stream()
+                .sorted(Comparator.comparing(AuditEvent::occurredAt).thenComparing(AuditEvent::id))
+                .toList();
     }
 
     public List<UserInfo> users(CurrentUser currentUser) {
         requirePermission(currentUser, "access:read");
-        return users;
+        return users.stream()
+                .map(this::withEffectiveGrants)
+                .toList();
     }
 
     public List<RoleInfo> roles(CurrentUser currentUser) {
@@ -374,5 +448,84 @@ public class InMemoryMonitorData {
         if (!currentUser.hasPermission(permission)) {
             throw new ForbiddenException(ErrorCode.FORBIDDEN, "Missing permission: " + permission);
         }
+    }
+
+    public synchronized UserInfo grantApplicationAccess(String userId, String applicationId, CurrentUser currentUser) {
+        requirePermission(currentUser, "access:write");
+        UserInfo user = requireExistingUser(userId);
+        requireExistingApplication(applicationId);
+        applicationGrantsByUser.computeIfAbsent(user.id(), ignored -> ConcurrentHashMap.newKeySet()).add(applicationId);
+        appendAudit(currentUser, "ACCESS_GRANT_APPLICATION", "USER", user.id(), "SUCCESS");
+        return withEffectiveGrants(user);
+    }
+
+    public synchronized UserInfo revokeApplicationAccess(String userId, String applicationId, CurrentUser currentUser) {
+        requirePermission(currentUser, "access:write");
+        UserInfo user = requireExistingUser(userId);
+        requireExistingApplication(applicationId);
+        Optional.ofNullable(applicationGrantsByUser.get(user.id())).ifPresent(grants -> grants.remove(applicationId));
+        appendAudit(currentUser, "ACCESS_REVOKE_APPLICATION", "USER", user.id(), "SUCCESS");
+        return withEffectiveGrants(user);
+    }
+
+    public synchronized UserInfo grantBusinessLineAccess(String userId, String businessLine, CurrentUser currentUser) {
+        requirePermission(currentUser, "access:write");
+        UserInfo user = requireExistingUser(userId);
+        businessLineGrantsByUser.computeIfAbsent(user.id(), ignored -> ConcurrentHashMap.newKeySet()).add(businessLine);
+        appendAudit(currentUser, "ACCESS_GRANT_BUSINESS_LINE", "USER", user.id(), "SUCCESS");
+        return withEffectiveGrants(user);
+    }
+
+    public synchronized UserInfo revokeBusinessLineAccess(String userId, String businessLine, CurrentUser currentUser) {
+        requirePermission(currentUser, "access:write");
+        UserInfo user = requireExistingUser(userId);
+        Optional.ofNullable(businessLineGrantsByUser.get(user.id())).ifPresent(grants -> grants.remove(businessLine));
+        appendAudit(currentUser, "ACCESS_REVOKE_BUSINESS_LINE", "USER", user.id(), "SUCCESS");
+        return withEffectiveGrants(user);
+    }
+
+    private boolean canAccessApplication(CurrentUser currentUser, ApplicationAsset application) {
+        return currentUser.dataScope().canAccessApplication(application)
+                || Optional.ofNullable(applicationGrantsByUser.get(currentUser.user().id())).orElse(Set.of()).contains(application.id())
+                || Optional.ofNullable(businessLineGrantsByUser.get(currentUser.user().id())).orElse(Set.of()).contains(application.businessLine());
+    }
+
+    private boolean hasExplicitApplicationGrant(CurrentUser currentUser, Set<String> applicationIds) {
+        Set<String> grants = Optional.ofNullable(applicationGrantsByUser.get(currentUser.user().id())).orElse(Set.of());
+        return applicationIds.stream().anyMatch(grants::contains);
+    }
+
+    private UserInfo requireExistingUser(String userId) {
+        return users.stream()
+                .filter(user -> user.id().equals(userId))
+                .findFirst()
+                .orElseThrow(() -> new NotFoundException("User not found"));
+    }
+
+    private ApplicationAsset requireExistingApplication(String applicationId) {
+        return applications.stream()
+                .filter(application -> application.id().equals(applicationId))
+                .findFirst()
+                .orElseThrow(() -> new NotFoundException("Application not found"));
+    }
+
+    private UserInfo withEffectiveGrants(UserInfo user) {
+        Set<String> businessLines = new java.util.HashSet<>(user.businessLines());
+        businessLines.addAll(Optional.ofNullable(businessLineGrantsByUser.get(user.id())).orElse(Set.of()));
+        Set<String> menus = new java.util.HashSet<>(user.menus());
+        menus.add("assets");
+        return new UserInfo(user.id(), user.username(), user.displayName(), user.roles(), Set.copyOf(businessLines), Set.copyOf(menus));
+    }
+
+    private void appendAudit(CurrentUser currentUser, String action, String targetType, String targetId, String result) {
+        auditEvents.add(new AuditEvent(
+                "audit-" + String.format("%03d", auditSequence.incrementAndGet()),
+                currentUser.user().id(),
+                action,
+                targetType,
+                targetId,
+                result,
+                OffsetDateTime.now()
+        ));
     }
 }

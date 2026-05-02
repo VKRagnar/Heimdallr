@@ -61,6 +61,16 @@ export interface Application {
   updatedAt: string;
 }
 
+export interface ApplicationPayload {
+  id?: string;
+  code: string;
+  name: string;
+  businessLine: string;
+  environment: Environment;
+  ownerUserIds: string[];
+  accessStatus: AccessStatus;
+}
+
 export interface ApplicationDetail extends Application {
   description?: string;
   servers: string[];
@@ -80,6 +90,15 @@ export interface Server {
   memoryUsage: number;
   applicationCount: number;
   updatedAt: string;
+}
+
+export interface ServerPayload {
+  id?: string;
+  hostname: string;
+  ip: string;
+  environment: Environment;
+  applicationIds: string[];
+  accessStatus: AccessStatus;
 }
 
 export interface SystemUser {
@@ -164,6 +183,14 @@ export interface ApplicationAccess {
   agentStatus: AgentStatus;
   accessStatus: AccessStatus;
   lastVerifiedAt: string;
+}
+
+export interface ApplicationAccessGrantPayload {
+  userId: string;
+  applicationId?: string;
+  businessLine?: string;
+  scopeType: 'application' | 'businessLine';
+  action: 'grant' | 'revoke';
 }
 
 export interface AgentInstance {

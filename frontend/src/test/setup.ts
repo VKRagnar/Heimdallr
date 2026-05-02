@@ -13,3 +13,6 @@ Object.defineProperty(window, 'matchMedia', {
     dispatchEvent: () => false,
   }),
 });
+
+const getComputedStyle = window.getComputedStyle;
+window.getComputedStyle = (element: Element, pseudoElt?: string | null) => getComputedStyle(element, pseudoElt ? undefined : pseudoElt);

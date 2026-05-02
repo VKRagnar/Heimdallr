@@ -1,7 +1,7 @@
 package com.heimdallr.monitor.api.service;
 
 import com.heimdallr.monitor.api.dto.LogSearchCriteria;
-import com.heimdallr.monitor.api.fixture.InMemoryMonitorData;
+import com.heimdallr.monitor.api.repository.MonitorData;
 import com.heimdallr.monitor.common.domain.api.PageResult;
 import com.heimdallr.monitor.common.domain.model.LogEntry;
 import com.heimdallr.monitor.common.security.CurrentUser;
@@ -10,9 +10,9 @@ import org.springframework.stereotype.Service;
 
 @Service
 public class LogQueryService {
-    private final InMemoryMonitorData data;
+    private final MonitorData data;
 
-    public LogQueryService(InMemoryMonitorData data) {
+    public LogQueryService(MonitorData data) {
         this.data = data;
     }
 

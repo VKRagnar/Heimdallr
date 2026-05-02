@@ -1,7 +1,8 @@
-import { Input, Select } from 'antd';
+import { Button, Input, Select } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useQuery } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
+import { ReloadOutlined } from '@ant-design/icons';
 import { systemApi } from '../api/services';
 import { DataTable } from '../components/DataTable';
 import { FilterBar } from '../components/FilterBar';
@@ -27,7 +28,7 @@ export function AuditEventsPage() {
   return (
     <>
       <PageHeader title="审计" description="权限、敏感数据和关键配置操作的审计查询。" breadcrumb={['系统管理', '审计']} />
-      <FilterBar onSearch={() => setParams(query)} onReset={() => setParams({})}>
+      <FilterBar onSearch={() => setParams(query)} onReset={() => setParams({})} extra={<Button icon={<ReloadOutlined />} onClick={() => void refetch()}>刷新审计</Button>}>
         <Input placeholder="事件 / 操作人 / 对象" defaultValue={params.get('keyword') ?? ''} onChange={(event) => query.keyword = event.target.value} />
         <Select
           placeholder="结果"

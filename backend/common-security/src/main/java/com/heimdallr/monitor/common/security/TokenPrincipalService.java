@@ -13,9 +13,12 @@ import org.springframework.stereotype.Component;
 public class TokenPrincipalService {
     private static final Set<String> ALL_PERMISSIONS = Set.of(
             "applications:read",
+            "applications:write",
             "servers:read",
+            "servers:write",
             "audit:read",
             "access:read",
+            "access:write",
             "data-sources:read",
             "data-sources:write",
             "agents:read",

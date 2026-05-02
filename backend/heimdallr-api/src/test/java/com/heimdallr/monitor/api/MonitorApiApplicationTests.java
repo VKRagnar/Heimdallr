@@ -56,8 +56,167 @@ class MonitorApiApplicationTests {
         HttpResponse<String> sreResponse = get("/api/v1/system/audit-events", "sre-token", null);
 
         assertThat(sreResponse.statusCode()).isEqualTo(200);
-        assertThat(sreResponse.body()).contains("\"total\":3");
         assertThat(sreResponse.body()).contains("\"id\":\"audit-001\"");
+    }
+
+    @Test
+    void sprint1AssetMaintenanceWritesAuditEventsAndRejectsMissingPermission() throws Exception {
+        int beforeAuditCount = auditEventCount();
+
+        HttpResponse<String> createApplicationResponse = post(
+                "/api/v1/applications",
+                "admin-token",
+                "{\"id\":\"app-sprint1-assets\",\"code\":\"S1A\",\"name\":\"Sprint 1 Assets\",\"businessLine\":\"asset-hardening\",\"environment\":\"prod\",\"ownerUserIds\":[\"u-admin\"],\"accessStatus\":\"CONNECTED\"}"
+        );
+        assertThat(createApplicationResponse.statusCode()).isEqualTo(200);
+        assertThat(createApplicationResponse.body()).contains("\"id\":\"app-sprint1-assets\"");
+
+        HttpResponse<String> updateApplicationResponse = put(
+                "/api/v1/applications/app-sprint1-assets",
+                "admin-token",
+                "{\"code\":\"S1A\",\"name\":\"Sprint 1 Assets Updated\",\"businessLine\":\"asset-hardening\",\"environment\":\"prod\",\"ownerUserIds\":[\"u-admin\"],\"accessStatus\":\"DEGRADED\"}"
+        );
+        assertThat(updateApplicationResponse.statusCode()).isEqualTo(200);
+        assertThat(updateApplicationResponse.body()).contains("Sprint 1 Assets Updated");
+        assertThat(updateApplicationResponse.body()).contains("\"accessStatus\":\"DEGRADED\"");
+
+        HttpResponse<String> importServerResponse = post(
+                "/api/v1/servers/import",
+                "admin-token",
+                "[{\"id\":\"srv-sprint1-assets\",\"hostname\":\"sprint1-api-01\",\"ip\":\"10.10.88.11\",\"environment\":\"prod\",\"applicationIds\":[\"app-sprint1-assets\"],\"accessStatus\":\"CONNECTED\"}]"
+        );
+        assertThat(importServerResponse.statusCode()).isEqualTo(200);
+        assertThat(importServerResponse.body()).contains("\"total\":1");
+        assertThat(importServerResponse.body()).contains("\"id\":\"srv-sprint1-assets\"");
+
+        HttpResponse<String> forbiddenResponse = post(
+                "/api/v1/applications",
+                "ace-owner-token",
+                "{\"id\":\"app-denied\",\"code\":\"DENIED\",\"name\":\"Denied\",\"businessLine\":\"trade\",\"environment\":\"prod\",\"ownerUserIds\":[],\"accessStatus\":\"CONNECTED\"}"
+        );
+        assertThat(forbiddenResponse.statusCode()).isEqualTo(403);
+        assertThat(forbiddenResponse.body()).contains("Missing permission: applications:write");
+
+        HttpResponse<String> auditResponse = get("/api/v1/system/audit-events", "admin-token", null);
+        assertThat(countOccurrences(auditResponse.body(), "\"id\":\"audit-")).isGreaterThanOrEqualTo(beforeAuditCount + 3);
+        assertThat(auditResponse.body()).contains("\"actorUserId\":\"u-admin\"");
+        assertThat(auditResponse.body()).contains("\"action\":\"APPLICATION_UPSERT\"");
+        assertThat(auditResponse.body()).contains("\"targetType\":\"APPLICATION\"");
+        assertThat(auditResponse.body()).contains("\"result\":\"SUCCESS\"");
+        assertThat(auditResponse.body()).contains("\"targetId\":\"srv-sprint1-assets\"");
+        assertThat(auditResponse.body()).contains("\"targetType\":\"SERVER\"");
+        assertThat(auditResponse.body().indexOf("\"id\":\"audit-001\"")).isLessThan(auditResponse.body().indexOf("\"id\":\"audit-002\""));
+        assertThat(auditResponse.body().indexOf("\"id\":\"audit-002\"")).isLessThan(auditResponse.body().indexOf("\"id\":\"audit-003\""));
+    }
+
+    @Test
+    void sprint1AccessGrantAndRevokeAffectApplicationVisibilityAndAudit() throws Exception {
+        post(
+                "/api/v1/applications",
+                "admin-token",
+                "{\"id\":\"app-sprint1-access\",\"code\":\"S1ACCESS\",\"name\":\"Sprint 1 Access\",\"businessLine\":\"restricted-sprint1\",\"environment\":\"prod\",\"ownerUserIds\":[],\"accessStatus\":\"CONNECTED\"}"
+        );
+        HttpResponse<String> beforeGrantResponse = get("/api/v1/applications", "ace-owner-token", null);
+        assertThat(beforeGrantResponse.body()).doesNotContain("\"id\":\"app-sprint1-access\"");
+
+        int beforeAuditCount = auditEventCount();
+        HttpResponse<String> grantResponse = post(
+                "/api/v1/access/users/u-ace-owner/applications",
+                "admin-token",
+                "{\"applicationId\":\"app-sprint1-access\"}"
+        );
+        assertThat(grantResponse.statusCode()).isEqualTo(200);
+
+        HttpResponse<String> afterGrantResponse = get("/api/v1/applications", "ace-owner-token", null);
+        assertThat(afterGrantResponse.body()).contains("\"id\":\"app-sprint1-access\"");
+
+        HttpResponse<String> revokeResponse = delete("/api/v1/access/users/u-ace-owner/applications/app-sprint1-access", "admin-token");
+        assertThat(revokeResponse.statusCode()).isEqualTo(200);
+
+        HttpResponse<String> afterRevokeResponse = get("/api/v1/applications", "ace-owner-token", null);
+        assertThat(afterRevokeResponse.body()).doesNotContain("\"id\":\"app-sprint1-access\"");
+
+        HttpResponse<String> forbiddenGrantResponse = post(
+                "/api/v1/access/users/u-ace-owner/business-lines",
+                "ace-owner-token",
+                "{\"businessLine\":\"content\"}"
+        );
+        assertThat(forbiddenGrantResponse.statusCode()).isEqualTo(403);
+        assertThat(forbiddenGrantResponse.body()).contains("Missing permission: access:write");
+
+        HttpResponse<String> auditResponse = get("/api/v1/system/audit-events", "admin-token", null);
+        assertThat(countOccurrences(auditResponse.body(), "\"id\":\"audit-")).isGreaterThanOrEqualTo(beforeAuditCount + 2);
+        assertThat(auditResponse.body()).contains("\"action\":\"ACCESS_GRANT_APPLICATION\"");
+        assertThat(auditResponse.body()).contains("\"action\":\"ACCESS_REVOKE_APPLICATION\"");
+    }
+
+    @Test
+    void sprint1WriteApisValidateRequestsAndReturnExpectedBoundaryErrors() throws Exception {
+        HttpResponse<String> invalidApplicationResponse = post(
+                "/api/v1/applications",
+                "admin-token",
+                "{\"id\":\"app-invalid\",\"code\":\"\",\"name\":\"Invalid\",\"businessLine\":\"qa\",\"environment\":\"prod\",\"ownerUserIds\":[],\"accessStatus\":\"CONNECTED\"}"
+        );
+        assertThat(invalidApplicationResponse.statusCode()).isEqualTo(400);
+        assertThat(invalidApplicationResponse.body()).contains("\"code\":\"VALIDATION_FAILED\"");
+
+        HttpResponse<String> invalidServerResponse = post(
+                "/api/v1/servers",
+                "admin-token",
+                "{\"id\":\"srv-invalid\",\"hostname\":\"invalid-01\",\"ip\":\"10.10.77.1\",\"environment\":\"prod\",\"applicationIds\":[],\"accessStatus\":\"CONNECTED\"}"
+        );
+        assertThat(invalidServerResponse.statusCode()).isEqualTo(400);
+        assertThat(invalidServerResponse.body()).contains("\"code\":\"VALIDATION_FAILED\"");
+
+        HttpResponse<String> emptyImportResponse = post("/api/v1/applications/import", "admin-token", "[]");
+        assertThat(emptyImportResponse.statusCode()).isEqualTo(400);
+        assertThat(emptyImportResponse.body()).contains("\"code\":\"VALIDATION_FAILED\"");
+
+        HttpResponse<String> unknownApplicationResponse = post(
+                "/api/v1/servers/import",
+                "admin-token",
+                "[{\"id\":\"srv-unknown-app\",\"hostname\":\"unknown-app-01\",\"ip\":\"10.10.77.2\",\"environment\":\"prod\",\"applicationIds\":[\"app-not-found\"],\"accessStatus\":\"CONNECTED\"}]"
+        );
+        assertThat(unknownApplicationResponse.statusCode()).isEqualTo(404);
+        assertThat(unknownApplicationResponse.body()).contains("Application not found");
+
+        HttpResponse<String> unknownUserGrantResponse = post(
+                "/api/v1/access/users/u-missing/applications",
+                "admin-token",
+                "{\"applicationId\":\"app-ace\"}"
+        );
+        assertThat(unknownUserGrantResponse.statusCode()).isEqualTo(404);
+        assertThat(unknownUserGrantResponse.body()).contains("User not found");
+    }
+
+    @Test
+    void sprint1BusinessLineGrantAndRevokeControlVisibility() throws Exception {
+        HttpResponse<String> beforeGrantResponse = get("/api/v1/applications", "ace-owner-token", null);
+        assertThat(beforeGrantResponse.body()).doesNotContain("\"id\":\"app-cms\"");
+
+        int beforeAuditCount = auditEventCount();
+        HttpResponse<String> grantResponse = post(
+                "/api/v1/access/users/u-ace-owner/business-lines",
+                "admin-token",
+                "{\"businessLine\":\"content\"}"
+        );
+        assertThat(grantResponse.statusCode()).isEqualTo(200);
+        assertThat(grantResponse.body()).contains("\"businessLines\"");
+        assertThat(grantResponse.body()).contains("content");
+
+        HttpResponse<String> afterGrantResponse = get("/api/v1/applications", "ace-owner-token", null);
+        assertThat(afterGrantResponse.body()).contains("\"id\":\"app-cms\"");
+
+        HttpResponse<String> revokeResponse = delete("/api/v1/access/users/u-ace-owner/business-lines/content", "admin-token");
+        assertThat(revokeResponse.statusCode()).isEqualTo(200);
+
+        HttpResponse<String> afterRevokeResponse = get("/api/v1/applications", "ace-owner-token", null);
+        assertThat(afterRevokeResponse.body()).doesNotContain("\"id\":\"app-cms\"");
+
+        HttpResponse<String> auditResponse = get("/api/v1/system/audit-events", "admin-token", null);
+        assertThat(countOccurrences(auditResponse.body(), "\"id\":\"audit-")).isGreaterThanOrEqualTo(beforeAuditCount + 2);
+        assertThat(auditResponse.body()).contains("\"action\":\"ACCESS_GRANT_BUSINESS_LINE\"");
+        assertThat(auditResponse.body()).contains("\"action\":\"ACCESS_REVOKE_BUSINESS_LINE\"");
     }
 
     @Test
@@ -130,5 +289,40 @@ class MonitorApiApplicationTests {
                 .header("Content-Type", "application/json")
                 .build();
         return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+    }
+
+    private HttpResponse<String> put(String path, String token, String body) throws IOException, InterruptedException {
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create("http://localhost:" + port + path))
+                .PUT(HttpRequest.BodyPublishers.ofString(body))
+                .header("Authorization", token)
+                .header("Content-Type", "application/json")
+                .build();
+        return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+    }
+
+    private HttpResponse<String> delete(String path, String token) throws IOException, InterruptedException {
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create("http://localhost:" + port + path))
+                .DELETE()
+                .header("Authorization", token)
+                .build();
+        return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+    }
+
+    private int auditEventCount() throws IOException, InterruptedException {
+        HttpResponse<String> response = get("/api/v1/system/audit-events", "admin-token", null);
+        assertThat(response.statusCode()).isEqualTo(200);
+        return countOccurrences(response.body(), "\"id\":\"audit-");
+    }
+
+    private static int countOccurrences(String value, String needle) {
+        int count = 0;
+        int index = 0;
+        while ((index = value.indexOf(needle, index)) >= 0) {
+            count++;
+            index += needle.length();
+        }
+        return count;
     }
 }
