@@ -1,4 +1,6 @@
-import { Navigate, Route, Routes } from 'react-router-dom';
+import type { ReactNode } from 'react';
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
+import { getAuthToken } from '../api/client';
 import { PermissionGate } from '../components/PermissionGate';
 import { AppShell } from '../layouts/AppShell';
 import { AgentsPage } from '../pages/AgentsPage';
@@ -9,15 +11,25 @@ import { AuditEventsPage } from '../pages/AuditEventsPage';
 import { DataSourcesPage } from '../pages/DataSourcesPage';
 import { HomePage } from '../pages/HomePage';
 import { LogsSearchPage } from '../pages/LogsSearchPage';
+import { LoginPage } from '../pages/LoginPage';
 import { MetricsPage } from '../pages/MetricsPage';
 import { ServersPage } from '../pages/ServersPage';
 import { SystemRolesPage } from '../pages/SystemRolesPage';
 import { SystemUsersPage } from '../pages/SystemUsersPage';
 
+function RequireAuth({ children }: { children: ReactNode }) {
+  const location = useLocation();
+  if (!getAuthToken()) {
+    return <Navigate to="/login" replace state={{ from: location }} />;
+  }
+  return children;
+}
+
 export function AppRoutes() {
   return (
     <Routes>
-      <Route element={<AppShell />}>
+      <Route path="/login" element={<LoginPage />} />
+      <Route element={<RequireAuth><AppShell /></RequireAuth>}>
         <Route index element={<Navigate to="/home" replace />} />
         <Route path="/home" element={<HomePage />} />
         <Route path="/applications" element={<ApplicationsPage />} />
@@ -66,7 +78,7 @@ export function AppRoutes() {
         <Route
           path="/system/users"
           element={
-            <PermissionGate permission="system:users:read">
+            <PermissionGate permission="access:read">
               <SystemUsersPage />
             </PermissionGate>
           }
@@ -74,7 +86,7 @@ export function AppRoutes() {
         <Route
           path="/system/roles"
           element={
-            <PermissionGate permission="system:roles:read">
+            <PermissionGate permission="access:read">
               <SystemRolesPage />
             </PermissionGate>
           }
@@ -82,7 +94,7 @@ export function AppRoutes() {
         <Route
           path="/system/audit-events"
           element={
-            <PermissionGate permission="system:audit:read">
+            <PermissionGate permission="audit:read">
               <AuditEventsPage />
             </PermissionGate>
           }

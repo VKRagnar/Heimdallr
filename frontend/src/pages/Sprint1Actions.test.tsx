@@ -32,11 +32,13 @@ function clickPrimaryModalButton() {
 
 describe('Sprint 1 action entries', () => {
   beforeEach(() => {
+    window.localStorage.setItem('heimdallr-token', 'admin-token');
     vi.stubGlobal('fetch', vi.fn(() => Promise.reject(new TypeError('offline'))));
   });
 
   afterEach(() => {
     cleanup();
+    window.localStorage.clear();
     vi.unstubAllGlobals();
   });
 

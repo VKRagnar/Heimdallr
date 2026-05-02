@@ -15,6 +15,7 @@ export interface RequestOptions extends Omit<RequestInit, 'body'> {
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '';
 const TOKEN_KEY = 'heimdallr-token';
+const MOCK_FALLBACK_ENABLED = import.meta.env.MODE === 'test' || import.meta.env.VITE_ENABLE_MOCK_FALLBACK === 'true';
 
 function createRequestId() {
   if (globalThis.crypto?.randomUUID) {
@@ -49,6 +50,10 @@ export function getAuthToken() {
 
 export function setAuthToken(token: string) {
   window.localStorage.setItem(TOKEN_KEY, token);
+}
+
+export function clearAuthToken() {
+  window.localStorage.removeItem(TOKEN_KEY);
 }
 
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
@@ -97,15 +102,20 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
 }
 
 export async function withMockFallback<T>(request: Promise<T>, fallback: T): Promise<T> {
-  if (import.meta.env.PROD) {
+  if (!MOCK_FALLBACK_ENABLED) {
     return request;
   }
   try {
     return await request;
   } catch (error) {
     if (error instanceof ApiError && (error.code === 'NETWORK_ERROR' || error.status === 404)) {
+      console.warn(`[api] mock fallback enabled for ${error.code}${error.status ? `/${error.status}` : ''}`);
       return fallback;
     }
     throw error;
   }
+}
+
+export function isMockFallbackEnabled() {
+  return MOCK_FALLBACK_ENABLED;
 }

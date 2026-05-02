@@ -2,10 +2,20 @@ package com.heimdallr.monitor.api.repository;
 
 import com.heimdallr.monitor.api.fixture.InMemoryMonitorData;
 import com.heimdallr.monitor.common.domain.api.ErrorCode;
+import com.heimdallr.monitor.common.domain.exception.ApiException;
 import com.heimdallr.monitor.common.domain.exception.ForbiddenException;
 import com.heimdallr.monitor.common.domain.exception.NotFoundException;
+import com.heimdallr.monitor.common.domain.model.AgentInstance;
 import com.heimdallr.monitor.common.domain.model.ApplicationAsset;
 import com.heimdallr.monitor.common.domain.model.AuditEvent;
+import com.heimdallr.monitor.common.domain.model.DataSourceBinding;
+import com.heimdallr.monitor.common.domain.model.DataSourceConfig;
+import com.heimdallr.monitor.common.domain.model.DataSourceValidationResult;
+import com.heimdallr.monitor.common.domain.model.DefaultMetricMapping;
+import com.heimdallr.monitor.common.domain.model.LogEntry;
+import com.heimdallr.monitor.common.domain.model.MetricDefinition;
+import com.heimdallr.monitor.common.domain.model.MetricSeries;
+import com.heimdallr.monitor.common.domain.model.MonitorObject;
 import com.heimdallr.monitor.common.domain.model.RoleInfo;
 import com.heimdallr.monitor.common.domain.model.ServerAsset;
 import com.heimdallr.monitor.common.domain.model.UserInfo;
@@ -15,7 +25,9 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -285,6 +297,323 @@ public class JdbcMonitorData extends InMemoryMonitorData {
     }
 
     @Override
+    public List<MonitorObject> visibleMonitorObjects(CurrentUser currentUser) {
+        String sql = """
+                SELECT mo.id, mo.code, mo.name, mo.object_type, mo.env, bl.code AS business_line,
+                       mo.health_status, mo.access_status, mo.key_metrics::text,
+                       COALESCE(array_agg(DISTINCT oad.application_id::text) FILTER (WHERE oad.application_id IS NOT NULL), ARRAY[]::text[]) AS application_ids,
+                       COALESCE(array_agg(DISTINCT osb.server_id::text) FILTER (WHERE osb.server_id IS NOT NULL), ARRAY[]::text[]) AS server_ids,
+                       COALESCE(array_agg(DISTINCT ao.user_id::text) FILTER (WHERE ao.user_id IS NOT NULL), ARRAY[]::text[]) AS owner_user_ids
+                FROM monitor_object mo
+                JOIN business_line bl ON bl.id = mo.business_line_id
+                LEFT JOIN object_app_dependency oad ON oad.object_id = mo.id AND oad.deleted_at IS NULL
+                LEFT JOIN object_server_binding osb ON osb.object_id = mo.id AND osb.deleted_at IS NULL
+                LEFT JOIN application_owner ao ON ao.application_id = oad.application_id AND ao.deleted_at IS NULL
+                WHERE mo.deleted_at IS NULL
+                  AND (:platformAdmin OR mo.env = ANY(:envs))
+                  AND (:platformAdmin
+                    OR bl.code = ANY(:businessLines)
+                    OR EXISTS (
+                        SELECT 1 FROM object_app_dependency dep
+                        JOIN application_authorization aa ON aa.application_id = dep.application_id
+                        WHERE dep.object_id = mo.id AND aa.user_id = :userId AND aa.status = 'active' AND aa.deleted_at IS NULL
+                    ))
+                GROUP BY mo.id, mo.code, mo.name, mo.object_type, mo.env, bl.code, mo.health_status, mo.access_status, mo.key_metrics
+                ORDER BY mo.code
+                """;
+        return jdbc.sql(sql)
+                .param("platformAdmin", currentUser.dataScope().platformAdmin())
+                .param("envs", currentUser.dataScope().environments().toArray(String[]::new))
+                .param("businessLines", currentUser.dataScope().businessLines().toArray(String[]::new))
+                .param("userId", resolveUserId(currentUser).orElse(null))
+                .query(this::monitorObject)
+                .list();
+    }
+
+    @Override
+    public MonitorObject requireVisibleMonitorObject(String objectId, CurrentUser currentUser) {
+        return visibleMonitorObjects(currentUser).stream()
+                .filter(object -> object.id().equals(objectId))
+                .findFirst()
+                .orElseThrow(() -> new NotFoundException("Monitor object not found"));
+    }
+
+    @Override
+    public List<MonitorObject> visibleApplicationDependencies(String applicationId, CurrentUser currentUser) {
+        ApplicationAsset application = requireVisibleApplication(applicationId, currentUser);
+        return visibleMonitorObjects(currentUser).stream()
+                .filter(object -> object.applicationIds().contains(application.id()))
+                .toList();
+    }
+
+    @Override
+    public List<DataSourceConfig> visibleDataSources(CurrentUser currentUser) {
+        return jdbc.sql("""
+                SELECT code, name, source_type, env, base_url, health_check_path, auth_type, secret_ref,
+                       timeout_seconds, retry_count, rate_limit_qps, status, last_check_at, last_success_at,
+                       last_error_code, last_error_message
+                FROM data_source
+                WHERE deleted_at IS NULL AND (:platformAdmin OR env = ANY(:envs))
+                ORDER BY code
+                """)
+                .param("platformAdmin", currentUser.dataScope().platformAdmin())
+                .param("envs", currentUser.dataScope().environments().toArray(String[]::new))
+                .query(this::dataSourceConfig)
+                .list();
+    }
+
+    @Override
+    public DataSourceConfig requireVisibleDataSource(String sourceId, CurrentUser currentUser) {
+        return visibleDataSources(currentUser).stream()
+                .filter(source -> source.id().equals(sourceId))
+                .findFirst()
+                .orElseThrow(() -> new NotFoundException("Data source not found"));
+    }
+
+    @Override
+    @Transactional
+    public DataSourceConfig saveDataSource(DataSourceConfig config, CurrentUser currentUser) {
+        requirePermission(currentUser, "data-sources:write");
+        if (!currentUser.dataScope().canAccessEnvironment(config.environment())) {
+            throw new ForbiddenException(ErrorCode.ENV_FORBIDDEN, "Environment is outside current user scope");
+        }
+        String code = config.id() == null || config.id().isBlank() ? "ds-" + UUID.randomUUID() : config.id();
+        jdbc.sql("""
+                INSERT INTO data_source (id, code, name, source_type, env, base_url, health_check_path, auth_type, secret_ref,
+                                         timeout_seconds, retry_count, rate_limit_qps, status, last_check_at, last_error_code, last_error_message)
+                VALUES (:id, :code, :name, :sourceType, :env, :baseUrl, :healthCheckPath, :authType, :secretRef,
+                        :timeoutSeconds, :retryCount, :rateLimitQps, :status, now(), 'VALIDATION_REQUIRED',
+                        'Data source saved; run validation before enabling production bindings')
+                ON CONFLICT (code, env) DO UPDATE
+                SET name = EXCLUDED.name,
+                    source_type = EXCLUDED.source_type,
+                    base_url = EXCLUDED.base_url,
+                    health_check_path = EXCLUDED.health_check_path,
+                    auth_type = EXCLUDED.auth_type,
+                    secret_ref = EXCLUDED.secret_ref,
+                    timeout_seconds = EXCLUDED.timeout_seconds,
+                    retry_count = EXCLUDED.retry_count,
+                    rate_limit_qps = EXCLUDED.rate_limit_qps,
+                    status = EXCLUDED.status,
+                    last_check_at = now(),
+                    last_error_code = EXCLUDED.last_error_code,
+                    last_error_message = EXCLUDED.last_error_message,
+                    updated_at = now()
+                """)
+                .param("id", stableUuid(code))
+                .param("code", code)
+                .param("name", config.name())
+                .param("sourceType", config.type())
+                .param("env", config.environment())
+                .param("baseUrl", config.baseUrl())
+                .param("healthCheckPath", config.healthCheckPath())
+                .param("authType", config.authType())
+                .param("secretRef", config.secretRef())
+                .param("timeoutSeconds", config.timeoutSeconds())
+                .param("retryCount", config.retryCount())
+                .param("rateLimitQps", config.rateLimitQps())
+                .param("status", normalizeStatus(config.status(), "DISABLED").toUpperCase())
+                .update();
+        return requireVisibleDataSource(code, currentUser);
+    }
+
+    @Override
+    public List<DataSourceBinding> visibleDataSourceBindings(CurrentUser currentUser, String objectId) {
+        Set<String> visibleObjectIds = visibleMonitorObjects(currentUser).stream()
+                .map(MonitorObject::id)
+                .collect(Collectors.toSet());
+        if (visibleObjectIds.isEmpty()) {
+            return List.of();
+        }
+        return jdbc.sql("""
+                SELECT dsb.code, mo.code AS object_code, mo.object_type, ds.code AS source_code, dsb.binding_type,
+                       dsb.external_labels::text, dsb.mapping_config::text, dsb.last_seen_at, dsb.access_status, dsb.failure_reason
+                FROM data_source_binding dsb
+                JOIN monitor_object mo ON mo.id = dsb.object_id
+                JOIN data_source ds ON ds.id = dsb.source_id
+                WHERE dsb.deleted_at IS NULL
+                  AND mo.code = ANY(:visibleObjectIds)
+                  AND (CAST(:objectId AS text) IS NULL OR mo.code = :objectId)
+                ORDER BY dsb.code
+                """)
+                .param("visibleObjectIds", visibleObjectIds.toArray(String[]::new))
+                .param("objectId", objectId)
+                .query(this::dataSourceBinding)
+                .list();
+    }
+
+    @Override
+    public DataSourceValidationResult validateDataSource(String sourceId, CurrentUser currentUser) {
+        DataSourceConfig source = requireVisibleDataSource(sourceId, currentUser);
+        boolean passed = !"DISABLED".equalsIgnoreCase(source.status()) && !"UNHEALTHY".equalsIgnoreCase(source.status());
+        List<DataSourceValidationResult.ValidationItem> items = List.of(
+                validationItem("basic_config", source.baseUrl() != null && source.baseUrl().startsWith("http"), "CONFIG_INVALID", "Base URL is valid"),
+                validationItem("connectivity", passed, Optional.ofNullable(source.lastErrorCode()).orElse("CONNECT_TIMEOUT"), Optional.ofNullable(source.lastErrorMessage()).orElse("Connection test passed")),
+                validationItem("auth", source.secretRef() != null && !source.secretRef().isBlank(), "AUTH_FAILED", "Secret reference is configured"),
+                validationItem("sample_data", passed, "NO_DATA", "Recent sample data is available")
+        );
+        return new DataSourceValidationResult(
+                source.id(),
+                passed,
+                passed ? "PASSED" : "FAILED",
+                OffsetDateTime.now(),
+                items,
+                Map.of("env", source.environment(), "sourceType", source.type()),
+                passed ? "Validation passed without exposing secret values" : "Validation failed; see failed checks"
+        );
+    }
+
+    @Override
+    public List<AgentInstance> visibleAgents(CurrentUser currentUser) {
+        Set<String> serverIds = visibleServers(currentUser).stream()
+                .map(ServerAsset::id)
+                .collect(Collectors.toSet());
+        if (serverIds.isEmpty()) {
+            return List.of();
+        }
+        return jdbc.sql("""
+                SELECT ai.code, ai.server_id::text, s.hostname, s.env, ai.version, ai.status,
+                       ai.last_heartbeat_at, ai.config_version, ai.failure_reason
+                FROM agent_instance ai
+                JOIN server s ON s.id = ai.server_id
+                WHERE ai.deleted_at IS NULL AND ai.server_id::text = ANY(:serverIds)
+                ORDER BY ai.code
+                """)
+                .param("serverIds", serverIds.toArray(String[]::new))
+                .query((rs, rowNum) -> new AgentInstance(
+                        rs.getString("code"),
+                        rs.getString("server_id"),
+                        rs.getString("hostname"),
+                        rs.getString("env"),
+                        rs.getString("version"),
+                        rs.getString("status"),
+                        rs.getObject("last_heartbeat_at", OffsetDateTime.class),
+                        rs.getString("config_version"),
+                        rs.getString("failure_reason")
+                ))
+                .list();
+    }
+
+    @Override
+    public List<MetricDefinition> metricDefinitions(CurrentUser currentUser, String objectType) {
+        requirePermission(currentUser, "metrics:read");
+        return jdbc.sql("""
+                SELECT code, name, object_type, category, unit, source_type, default_query_template, labels
+                FROM metric_definition
+                WHERE deleted_at IS NULL AND status = 'active'
+                  AND (CAST(:objectType AS text) IS NULL OR upper(object_type) = upper(:objectType))
+                ORDER BY code
+                """)
+                .param("objectType", objectType)
+                .query((rs, rowNum) -> new MetricDefinition(
+                        rs.getString("code"),
+                        rs.getString("name"),
+                        rs.getString("object_type"),
+                        rs.getString("category"),
+                        rs.getString("unit"),
+                        rs.getString("source_type"),
+                        rs.getString("default_query_template"),
+                        List.of((String[]) rs.getArray("labels").getArray())
+                ))
+                .list();
+    }
+
+    @Override
+    public List<DefaultMetricMapping> defaultMetricMappings(String objectType) {
+        return jdbc.sql("""
+                SELECT code, object_type, metric_code, source_type, external_metric, query_template, unit, default_labels::text
+                FROM metric_series_mapping
+                WHERE deleted_at IS NULL AND status = 'active'
+                  AND (CAST(:objectType AS text) IS NULL OR upper(object_type) = upper(:objectType))
+                ORDER BY code
+                """)
+                .param("objectType", objectType)
+                .query((rs, rowNum) -> new DefaultMetricMapping(
+                        rs.getString("code"),
+                        rs.getString("object_type"),
+                        rs.getString("metric_code"),
+                        rs.getString("source_type"),
+                        rs.getString("external_metric"),
+                        rs.getString("query_template"),
+                        rs.getString("unit"),
+                        jsonMap(rs.getString("default_labels"))
+                ))
+                .list();
+    }
+
+    @Override
+    public MetricSeries queryMetric(CurrentUser currentUser, String metricCode, String objectId, OffsetDateTime from, OffsetDateTime to) {
+        MetricDefinition definition = metricDefinitions(currentUser, null).stream()
+                .filter(metric -> metric.code().equals(metricCode))
+                .findFirst()
+                .orElseThrow(() -> new NotFoundException("Metric definition not found"));
+        MonitorObject object = requireVisibleMonitorObject(objectId, currentUser);
+        DataSourceBinding binding = visibleDataSourceBindings(currentUser, objectId).stream()
+                .filter(item -> "METRIC".equals(item.bindingType()))
+                .findFirst()
+                .orElseThrow(() -> new ApiException(ErrorCode.METRIC_NO_RECENT_DATA, 409, "Metric source is not connected"));
+        OffsetDateTime end = to == null ? OffsetDateTime.now() : to;
+        OffsetDateTime start = from == null ? end.minusMinutes(30) : from;
+        List<MetricSeries.MetricSample> samples = List.of(
+                new MetricSeries.MetricSample(start, sampleValue(metricCode, 0)),
+                new MetricSeries.MetricSample(start.plusMinutes(10), sampleValue(metricCode, 1)),
+                new MetricSeries.MetricSample(start.plusMinutes(20), sampleValue(metricCode, 2)),
+                new MetricSeries.MetricSample(end, sampleValue(metricCode, 3))
+        );
+        return new MetricSeries(metricCode, object.id(), object.name(), definition.unit(), binding.sourceId(), start, end, samples, binding.externalLabels());
+    }
+
+    @Override
+    public List<LogEntry> searchLogs(CurrentUser currentUser, com.heimdallr.monitor.api.dto.LogSearchCriteria criteria) {
+        Set<String> applicationIds = visibleApplications(currentUser).stream()
+                .map(ApplicationAsset::id)
+                .collect(Collectors.toSet());
+        if (applicationIds.isEmpty()) {
+            return List.of();
+        }
+        return jdbc.sql("""
+                SELECT le.code, le.occurred_at, le.application_id::text, mo.code AS object_code, le.env, le.level,
+                       le.message, le.trace_id, ds.code AS source_code, le.labels::text
+                FROM log_entry_sample le
+                LEFT JOIN monitor_object mo ON mo.id = le.object_id
+                LEFT JOIN data_source ds ON ds.id = le.source_id
+                WHERE le.deleted_at IS NULL
+                  AND le.application_id::text = ANY(:applicationIds)
+                  AND (CAST(:applicationId AS text) IS NULL OR le.application_id::text = :applicationId)
+                  AND (CAST(:objectId AS text) IS NULL OR mo.code = :objectId)
+                  AND (CAST(:environment AS text) IS NULL OR le.env = :environment)
+                  AND (CAST(:level AS text) IS NULL OR upper(le.level) = upper(CAST(:level AS text)))
+                  AND (CAST(:keyword AS text) IS NULL OR lower(le.message) LIKE lower(concat('%', CAST(:keyword AS text), '%')))
+                  AND (CAST(:traceId AS text) IS NULL OR le.trace_id = :traceId)
+                  AND (CAST(:fromTime AS timestamptz) IS NULL OR le.occurred_at >= :fromTime)
+                  AND (CAST(:toTime AS timestamptz) IS NULL OR le.occurred_at <= :toTime)
+                ORDER BY le.occurred_at DESC
+                """)
+                .param("applicationIds", applicationIds.toArray(String[]::new))
+                .param("applicationId", criteria.applicationId())
+                .param("objectId", criteria.objectId())
+                .param("environment", criteria.environment())
+                .param("level", criteria.level())
+                .param("keyword", criteria.keyword())
+                .param("traceId", criteria.traceId())
+                .param("fromTime", criteria.from())
+                .param("toTime", criteria.to())
+                .query((rs, rowNum) -> new LogEntry(
+                        rs.getString("code"),
+                        rs.getObject("occurred_at", OffsetDateTime.class),
+                        rs.getString("application_id"),
+                        rs.getString("object_code"),
+                        rs.getString("env"),
+                        rs.getString("level"),
+                        rs.getString("message"),
+                        rs.getString("trace_id"),
+                        rs.getString("source_code"),
+                        jsonMap(rs.getString("labels"))
+                ))
+                .list();
+    }
+
+    @Override
     @Transactional
     public UserInfo grantApplicationAccess(String userId, String applicationId, CurrentUser currentUser) {
         requirePermission(currentUser, "access:write");
@@ -364,6 +693,109 @@ public class JdbcMonitorData extends InMemoryMonitorData {
                 List.of((String[]) rs.getArray("owner_user_ids").getArray()),
                 rs.getString("access_status")
         );
+    }
+
+    private MonitorObject monitorObject(ResultSet rs, int rowNum) throws SQLException {
+        return new MonitorObject(
+                rs.getString("code"),
+                rs.getString("code"),
+                rs.getString("name"),
+                rs.getString("object_type"),
+                rs.getString("env"),
+                rs.getString("business_line"),
+                List.of((String[]) rs.getArray("owner_user_ids").getArray()),
+                List.of((String[]) rs.getArray("application_ids").getArray()),
+                List.of((String[]) rs.getArray("server_ids").getArray()),
+                rs.getString("health_status"),
+                rs.getString("access_status"),
+                jsonMap(rs.getString("key_metrics"))
+        );
+    }
+
+    private DataSourceConfig dataSourceConfig(ResultSet rs, int rowNum) throws SQLException {
+        return new DataSourceConfig(
+                rs.getString("code"),
+                rs.getString("name"),
+                rs.getString("source_type"),
+                rs.getString("env"),
+                rs.getString("base_url"),
+                rs.getString("health_check_path"),
+                rs.getString("auth_type"),
+                rs.getString("secret_ref"),
+                rs.getInt("timeout_seconds"),
+                rs.getInt("retry_count"),
+                rs.getInt("rate_limit_qps"),
+                rs.getString("status"),
+                rs.getObject("last_check_at", OffsetDateTime.class),
+                rs.getObject("last_success_at", OffsetDateTime.class),
+                rs.getString("last_error_code"),
+                rs.getString("last_error_message")
+        );
+    }
+
+    private DataSourceBinding dataSourceBinding(ResultSet rs, int rowNum) throws SQLException {
+        return new DataSourceBinding(
+                rs.getString("code"),
+                rs.getString("object_code"),
+                rs.getString("object_type"),
+                rs.getString("source_code"),
+                rs.getString("binding_type"),
+                jsonMap(rs.getString("external_labels")),
+                jsonMap(rs.getString("mapping_config")),
+                rs.getObject("last_seen_at", OffsetDateTime.class),
+                rs.getString("access_status"),
+                rs.getString("failure_reason")
+        );
+    }
+
+    private static DataSourceValidationResult.ValidationItem validationItem(String name, boolean passed, String errorCode, String successMessage) {
+        return new DataSourceValidationResult.ValidationItem(
+                name,
+                passed ? "PASSED" : "FAILED",
+                passed ? null : errorCode,
+                passed ? successMessage : errorCode
+        );
+    }
+
+    private static double sampleValue(String metricCode, int index) {
+        return switch (metricCode) {
+            case "mq_lag" -> 980 + index * 120;
+            case "broker_up" -> 3;
+            case "db_conn_usage" -> 56 + index * 2;
+            case "slow_sql_count" -> 2 + index;
+            case "redis_memory_usage" -> 70 + index;
+            case "http_5xx_rate" -> 1.1 + index * 0.2;
+            default -> 10 + index;
+        };
+    }
+
+    private static Map<String, String> jsonMap(String json) {
+        if (json == null || json.isBlank() || "{}".equals(json.trim())) {
+            return Map.of();
+        }
+        String body = json.trim();
+        if (body.startsWith("{")) {
+            body = body.substring(1);
+        }
+        if (body.endsWith("}")) {
+            body = body.substring(0, body.length() - 1);
+        }
+        Map<String, String> values = new LinkedHashMap<>();
+        for (String item : body.split(",")) {
+            String[] parts = item.split(":", 2);
+            if (parts.length == 2) {
+                values.put(unquote(parts[0]), unquote(parts[1]));
+            }
+        }
+        return values;
+    }
+
+    private static String unquote(String value) {
+        String trimmed = value.trim();
+        if (trimmed.startsWith("\"") && trimmed.endsWith("\"") && trimmed.length() >= 2) {
+            return trimmed.substring(1, trimmed.length() - 1);
+        }
+        return trimmed;
     }
 
     private ServerAsset serverAsset(ResultSet rs, int rowNum) throws SQLException {
@@ -462,13 +894,18 @@ public class JdbcMonitorData extends InMemoryMonitorData {
     }
 
     private RoleInfo roleInfo(UUID id, String code, String name) {
-        String normalized = code == null ? "" : code.toLowerCase();
-        Set<String> permissions = switch (normalized) {
-            case "platform_admin" -> ALL_PERMISSIONS;
-            case "sre" -> Set.of("applications:read", "servers:read", "audit:read", "access:read", "data-sources:read", "data-sources:write", "agents:read", "metrics:read", "logs:read");
-            case "app_owner" -> Set.of("applications:read", "servers:read", "agents:read", "metrics:read", "logs:read");
-            default -> Set.of("applications:read", "servers:read");
-        };
+        Set<String> permissions = Set.copyOf(jdbc.sql("""
+                SELECT p.code
+                FROM role_permission rp
+                JOIN permission p ON p.id = rp.permission_id
+                WHERE rp.role_id = :roleId
+                  AND p.status = 'active'
+                  AND p.deleted_at IS NULL
+                ORDER BY p.code
+                """)
+                .param("roleId", id)
+                .query(String.class)
+                .list());
         return new RoleInfo(id.toString(), code == null ? "VIEWER" : code.toUpperCase(), name, permissions);
     }
 

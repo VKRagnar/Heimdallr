@@ -1,4 +1,4 @@
-import { apiRequest, withMockFallback } from './client';
+import { apiRequest, isMockFallbackEnabled, withMockFallback } from './client';
 import { ApiError } from './errors';
 import {
   mockAgents,
@@ -86,6 +86,25 @@ interface BackendUserInfo {
   menus?: string[];
   email?: string;
   status?: string;
+}
+
+interface BackendRoleInfo {
+  id: string;
+  code: string;
+  name: string;
+  permissions?: string[];
+}
+
+interface BackendCurrentUser extends Omit<BackendUserInfo, 'roles'> {
+  roles?: BackendRoleInfo[] | string[];
+  permissions?: string[];
+}
+
+interface BackendDataScope {
+  platformAdmin?: boolean;
+  applicationIds?: string[];
+  businessLines?: string[];
+  environments?: Environment[];
 }
 
 interface BackendValidation {
@@ -267,18 +286,54 @@ function toSystemUser(user: BackendUserInfo): SystemUser {
   };
 }
 
+function toCurrentUser(user: BackendCurrentUser): CurrentUser {
+  const roles = user.roles ?? [];
+  const roleNames = roles.map((role) => typeof role === 'string' ? role : role.name ?? role.code ?? '-');
+  const rolePermissions = roles.flatMap((role) => typeof role === 'string' ? [] : role.permissions ?? []);
+  return {
+    id: user.id,
+    username: user.username,
+    name: user.displayName ?? user.name ?? user.username,
+    email: user.email,
+    roles: roleNames,
+    permissions: Array.from(new Set([...(user.permissions ?? []), ...rolePermissions])),
+    menus: user.menus ?? [],
+  };
+}
+
+function toDataScope(scope: BackendDataScope): DataScope {
+  return {
+    environments: scope.environments ?? ['prod'],
+    businessLines: (scope.businessLines ?? []).map((line) => ({ id: line, name: line })),
+    applicationIds: scope.applicationIds ?? [],
+    isGlobal: scope.platformAdmin ?? false,
+  };
+}
+
+function toRole(role: BackendRoleInfo): Role {
+  return {
+    id: role.id,
+    name: role.name,
+    code: role.code,
+    description: '-',
+    userCount: 0,
+    permissions: role.permissions ?? [],
+  };
+}
+
 function toPageWithItems<TInput, TOutput>(page: PageResult<TInput>, mapper: (item: TInput) => TOutput): PageResult<TOutput> {
   return { ...page, items: page.items.map(mapper) };
 }
 
 async function withMockMutationFallback<T>(request: Promise<T>, fallback: () => T): Promise<T> {
-  if (import.meta.env.PROD) {
+  if (!isMockFallbackEnabled()) {
     return request;
   }
   try {
     return await request;
   } catch (error) {
     if (error instanceof ApiError && (error.code === 'NETWORK_ERROR' || error.status === 404)) {
+      console.warn(`[api] mock mutation fallback enabled for ${error.code}${error.status ? `/${error.status}` : ''}`);
       return fallback();
     }
     throw error;
@@ -357,8 +412,8 @@ function auditMockAccess(payload: ApplicationAccessGrantPayload) {
 }
 
 export const accessApi = {
-  me: () => withMockFallback(apiRequest<CurrentUser>('/api/v1/me'), mockCurrentUser),
-  dataScope: () => withMockFallback(apiRequest<DataScope>('/api/v1/me/data-scope'), mockDataScope),
+  me: () => withMockFallback(apiRequest<BackendCurrentUser>('/api/v1/me').then(toCurrentUser), mockCurrentUser),
+  dataScope: () => withMockFallback(apiRequest<BackendDataScope>('/api/v1/me/data-scope').then(toDataScope), mockDataScope),
 };
 
 export const assetsApi = {
@@ -384,9 +439,9 @@ export const assetsApi = {
 
 export const systemApi = {
   users: (query?: Record<string, string | undefined>) =>
-    withMockFallback(apiRequest<PageResult<SystemUser>>('/api/v1/system/users', { query }), toPage(mockUsers)),
+    withMockFallback(apiRequest<PageResult<BackendUserInfo>>('/api/v1/access/users', { query }).then((page) => toPageWithItems(page, toSystemUser)), toPage(mockUsers)),
   roles: (query?: Record<string, string | undefined>) =>
-    withMockFallback(apiRequest<PageResult<Role>>('/api/v1/system/roles', { query }), toPage(mockRoles)),
+    withMockFallback(apiRequest<PageResult<BackendRoleInfo>>('/api/v1/access/roles', { query }).then((page) => toPageWithItems(page, toRole)), toPage(mockRoles)),
   auditEvents: (query?: Record<string, string | undefined>) =>
     withMockFallback(apiRequest<PageResult<BackendAuditEvent>>('/api/v1/system/audit-events', { query }).then((page) => toPageWithItems(page, toAuditEvent)), toPage(mockAuditEvents)),
 };

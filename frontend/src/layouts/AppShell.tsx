@@ -9,10 +9,12 @@ import {
   SafetyCertificateOutlined,
   TeamOutlined,
   UserOutlined,
+  LogoutOutlined,
 } from '@ant-design/icons';
-import { Avatar, Badge, Layout, Menu, Select, Space, Typography } from 'antd';
+import { Avatar, Badge, Button, Layout, Menu, Select, Space, Typography } from 'antd';
 import type { MenuProps } from 'antd';
-import { Link, Outlet, useLocation } from 'react-router-dom';
+import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { clearAuthToken } from '../api/client';
 import { useCurrentUser, useDataScope } from '../hooks/useCurrentUser';
 
 const { Header, Sider, Content } = Layout;
@@ -60,8 +62,14 @@ function getSelectedKey(pathname: string) {
 
 export function AppShell() {
   const location = useLocation();
+  const navigate = useNavigate();
   const { data: user } = useCurrentUser();
   const { data: scope } = useDataScope();
+
+  const logout = () => {
+    clearAuthToken();
+    navigate('/login', { replace: true });
+  };
 
   return (
     <Layout className="app-shell">
@@ -92,6 +100,7 @@ export function AppShell() {
               <Typography.Text strong>{user?.name ?? '加载中'}</Typography.Text>
               <Typography.Text type="secondary">{user?.roles.join(' / ') ?? '-'}</Typography.Text>
             </div>
+            <Button aria-label="退出登录" icon={<LogoutOutlined />} onClick={logout} />
           </Space>
         </Header>
         <Content className="app-content">
