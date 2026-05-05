@@ -8,3 +8,4 @@ frontend/node_modules/.tmp/
 .env
 .env.*
 !deploy/.env.example
+!deploy/.env.observability-test.example

@@ -1,0 +1,20 @@
+apiVersion: 1
+
+datasources:
+  - name: Prometheus-Test
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: true
+
+  - name: Elasticsearch-Test
+    type: elasticsearch
+    access: proxy
+    url: http://elasticsearch:9200
+    editable: true
+    jsonData:
+      index: test-logs-*
+      timeField: "@timestamp"
+      logMessageField: message
+      logLevelField: level
