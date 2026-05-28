@@ -23,7 +23,9 @@ public class TokenPrincipalService {
             "data-sources:write",
             "agents:read",
             "metrics:read",
-            "logs:read"
+            "logs:read",
+            "alerts:read",
+            "alerts:write"
     );
 
     private final Map<String, CurrentUser> usersByToken = Map.of(
@@ -32,7 +34,7 @@ public class TokenPrincipalService {
                     "u-admin",
                     "platform-admin",
                     "Platform Admin",
-                    new RoleInfo("r-admin", "PLATFORM_ADMIN", "平台管理员", ALL_PERMISSIONS),
+                    new RoleInfo("r-admin", "PLATFORM_ADMIN", "Platform Admin", ALL_PERMISSIONS),
                     new DataScope(true, Set.of(), Set.of(), Set.of("prod", "staging", "test"))
             ),
             "sre-token",
@@ -40,7 +42,7 @@ public class TokenPrincipalService {
                     "u-sre",
                     "sre",
                     "SRE Engineer",
-                    new RoleInfo("r-sre", "SRE", "SRE", Set.of("applications:read", "servers:read", "audit:read", "data-sources:read", "data-sources:write", "agents:read", "metrics:read", "logs:read")),
+                    new RoleInfo("r-sre", "SRE", "SRE", Set.of("applications:read", "servers:read", "audit:read", "data-sources:read", "data-sources:write", "agents:read", "metrics:read", "logs:read", "alerts:read", "alerts:write")),
                     new DataScope(false, Set.of(), Set.of("core-platform"), Set.of("prod", "staging"))
             ),
             "ace-owner-token",
@@ -48,7 +50,15 @@ public class TokenPrincipalService {
                     "u-ace-owner",
                     "ace-owner",
                     "ACE Owner",
-                    new RoleInfo("r-app-owner", "APP_OWNER", "应用负责人", Set.of("applications:read", "servers:read", "agents:read", "metrics:read", "logs:read")),
+                    new RoleInfo("r-app-owner", "APP_OWNER", "Application Owner", Set.of("applications:read", "servers:read", "agents:read", "metrics:read", "logs:read", "alerts:read", "alerts:write")),
+                    new DataScope(false, Set.of("app-ace"), Set.of("trade"), Set.of("prod"))
+            ),
+            "alert-viewer-token",
+            user(
+                    "u-alert-viewer",
+                    "alert-viewer",
+                    "Alert Viewer",
+                    new RoleInfo("r-alert-viewer", "ALERT_VIEWER", "Alert Viewer", Set.of("applications:read", "servers:read", "agents:read", "metrics:read", "logs:read", "alerts:read")),
                     new DataScope(false, Set.of("app-ace"), Set.of("trade"), Set.of("prod"))
             )
     );
@@ -60,7 +70,7 @@ public class TokenPrincipalService {
 
     private static CurrentUser user(String id, String username, String displayName, RoleInfo role, DataScope scope) {
         return new CurrentUser(
-                new UserInfo(id, username, displayName, List.of(role), scope.businessLines(), Set.of("assets", "access", "audit")),
+                new UserInfo(id, username, displayName, List.of(role), scope.businessLines(), Set.of("assets", "access", "audit", "alerts")),
                 scope,
                 username
         );

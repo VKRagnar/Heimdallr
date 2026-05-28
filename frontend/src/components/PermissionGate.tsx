@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { ForbiddenState } from './AppState';
 import { useCurrentUser } from '../hooks/useCurrentUser';
 
-export function hasAccess(userPermissions: string[] = [], required?: string) {
+function hasAccess(userPermissions: string[] = [], required?: string) {
   return !required || userPermissions.includes('*') || userPermissions.includes(required);
 }
 

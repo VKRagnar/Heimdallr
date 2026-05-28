@@ -16,6 +16,7 @@
 
 - Default profile uses the in-memory fixture data and is intended for fast local tests.
 - `db` profile uses PostgreSQL and runs the Flyway migrations from `backend/db-migration`.
+- When the observability stack runs on `192.168.3.2`, Prometheus should scrape the local backend through this developer host's LAN address, currently `192.168.3.11:8080`. The stack address `192.168.3.2:8080` is not the backend process.
 
 Example:
 

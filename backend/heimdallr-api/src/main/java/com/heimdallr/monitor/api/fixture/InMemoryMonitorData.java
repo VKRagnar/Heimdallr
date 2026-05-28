@@ -9,6 +9,11 @@ import com.heimdallr.monitor.common.domain.model.ApplicationAsset;
 import com.heimdallr.monitor.common.domain.model.ApplicationInstance;
 import com.heimdallr.monitor.common.domain.model.AuditEvent;
 import com.heimdallr.monitor.common.domain.model.AgentInstance;
+import com.heimdallr.monitor.common.domain.model.AlertEvent;
+import com.heimdallr.monitor.common.domain.model.AlertEventHistory;
+import com.heimdallr.monitor.common.domain.model.AlertEvaluationSample;
+import com.heimdallr.monitor.common.domain.model.AlertRule;
+import com.heimdallr.monitor.common.domain.model.AlertRuleRuntime;
 import com.heimdallr.monitor.common.domain.model.DataSourceBinding;
 import com.heimdallr.monitor.common.domain.model.DataSourceConfig;
 import com.heimdallr.monitor.common.domain.model.DataSourceValidationResult;
@@ -17,6 +22,8 @@ import com.heimdallr.monitor.common.domain.model.LogEntry;
 import com.heimdallr.monitor.common.domain.model.MetricDefinition;
 import com.heimdallr.monitor.common.domain.model.MetricSeries;
 import com.heimdallr.monitor.common.domain.model.MonitorObject;
+import com.heimdallr.monitor.common.domain.model.NotificationRecord;
+import com.heimdallr.monitor.common.domain.model.OnCallGroup;
 import com.heimdallr.monitor.common.domain.model.RoleInfo;
 import com.heimdallr.monitor.common.domain.model.ServerAsset;
 import com.heimdallr.monitor.common.domain.model.UserInfo;
@@ -36,6 +43,8 @@ import org.springframework.stereotype.Repository;
 @Repository
 @Profile("!db")
 public class InMemoryMonitorData implements MonitorData {
+    private static final int MAX_NOTIFICATION_RETRY_COUNT = 3;
+
     private final List<ApplicationAsset> applications = new CopyOnWriteArrayList<>(List.of(
             new ApplicationAsset("app-ace", "ACE", "ACE Trading", "trade", "prod", List.of("u-ace-owner"), "CONNECTED"),
             new ApplicationAsset("app-ipro", "IPRO", "iPro Portal", "trade", "staging", List.of("u-sre"), "DEGRADED"),
@@ -120,7 +129,22 @@ public class InMemoryMonitorData implements MonitorData {
             new AuditEvent("audit-002", "u-sre", "SERVER_LIST", "SERVER", "*", "SUCCESS", OffsetDateTime.now().minusHours(2)),
             new AuditEvent("audit-003", "u-ace-owner", "ME_VIEW", "USER", "u-ace-owner", "SUCCESS", OffsetDateTime.now().minusHours(1))
     ));
+    private final List<OnCallGroup> onCallGroups = new CopyOnWriteArrayList<>(List.of(
+            new OnCallGroup("ocg-trade", "trade-oncall", "Trade On-call", "trade", List.of("u-ace-owner", "u-sre"), "ACTIVE", OffsetDateTime.now().minusDays(1), OffsetDateTime.now().minusDays(1)),
+            new OnCallGroup("ocg-sre", "sre-oncall", "SRE On-call", "core-platform", List.of("u-sre"), "ACTIVE", OffsetDateTime.now().minusDays(1), OffsetDateTime.now().minusDays(1))
+    ));
+    private final List<AlertRule> alertRules = new CopyOnWriteArrayList<>();
+    private final Map<String, AlertRuleRuntime> alertRuleRuntimes = new ConcurrentHashMap<>();
+    private final List<AlertEvaluationSample> alertEvaluationSamples = new CopyOnWriteArrayList<>();
+    private final List<AlertEvent> alertEvents = new CopyOnWriteArrayList<>();
+    private final List<AlertEventHistory> alertEventHistories = new CopyOnWriteArrayList<>();
+    private final List<NotificationRecord> notificationRecords = new CopyOnWriteArrayList<>();
     private final AtomicInteger auditSequence = new AtomicInteger(3);
+    private final AtomicInteger alertRuleSequence = new AtomicInteger();
+    private final AtomicInteger alertEvaluationSampleSequence = new AtomicInteger();
+    private final AtomicInteger alertEventSequence = new AtomicInteger();
+    private final AtomicInteger alertHistorySequence = new AtomicInteger();
+    private final AtomicInteger notificationSequence = new AtomicInteger();
     private final Map<String, Set<String>> applicationGrantsByUser = new ConcurrentHashMap<>();
     private final Map<String, Set<String>> businessLineGrantsByUser = new ConcurrentHashMap<>();
 
@@ -392,6 +416,372 @@ public class InMemoryMonitorData implements MonitorData {
                 new MetricSeries.MetricSample(end, sampleValue(metricCode, 3))
         );
         return new MetricSeries(metricCode, object.id(), object.name(), definition.unit(), binding.sourceId(), start, end, samples, binding.externalLabels());
+    }
+
+    public List<AlertRule> alertRules(CurrentUser currentUser) {
+        requirePermission(currentUser, "alerts:read");
+        Set<String> visibleObjectIds = visibleMonitorObjects(currentUser).stream()
+                .map(MonitorObject::id)
+                .collect(java.util.stream.Collectors.toSet());
+        return alertRules.stream()
+                .filter(rule -> visibleObjectIds.contains(rule.objectId()))
+                .sorted(Comparator.comparing(AlertRule::updatedAt).reversed())
+                .toList();
+    }
+
+    public List<AlertRule> dueAlertRules(CurrentUser currentUser, OffsetDateTime now, int limit) {
+        requirePermission(currentUser, "alerts:write");
+        return alertRules(currentUser).stream()
+                .filter(AlertRule::enabled)
+                .filter(rule -> {
+                    AlertRuleRuntime runtime = alertRuleRuntimes.get(rule.id());
+                    return runtime == null || runtime.nextEvaluateAt() == null || !runtime.nextEvaluateAt().isAfter(now);
+                })
+                .limit(Math.max(limit, 1))
+                .toList();
+    }
+
+    public AlertRule requireAlertRule(String ruleId, CurrentUser currentUser) {
+        return alertRules(currentUser).stream()
+                .filter(rule -> rule.id().equals(ruleId))
+                .findFirst()
+                .orElseThrow(() -> new NotFoundException("Alert rule not found"));
+    }
+
+    public synchronized AlertRule saveAlertRule(AlertRule rule, CurrentUser currentUser) {
+        requirePermission(currentUser, "alerts:write");
+        if (rule.id() != null && !rule.id().isBlank() && alertRules.stream().anyMatch(item -> item.id().equals(rule.id()))) {
+            requireAlertRule(rule.id(), currentUser);
+        }
+        MonitorObject object = requireVisibleMonitorObject(rule.objectId(), currentUser);
+        String id = rule.id() == null || rule.id().isBlank() ? "alert-rule-" + alertRuleSequence.incrementAndGet() : rule.id();
+        OffsetDateTime now = OffsetDateTime.now();
+        AlertRule saved = new AlertRule(
+                id,
+                rule.name(),
+                object.id(),
+                object.name(),
+                rule.metricCode(),
+                rule.operator(),
+                rule.threshold(),
+                Math.max(rule.windowSeconds(), 60),
+                Math.max(rule.durationSeconds(), 0),
+                Math.max(rule.evaluationIntervalSeconds(), 30),
+                rule.severity() == null || rule.severity().isBlank() ? "P2" : rule.severity(),
+                rule.enabled(),
+                object.businessLine(),
+                object.applicationIds().isEmpty() ? null : object.applicationIds().getFirst(),
+                rule.onCallGroupId(),
+                rule.createdAt() == null ? now : rule.createdAt(),
+                now
+        );
+        alertRules.removeIf(item -> item.id().equals(saved.id()));
+        alertRules.add(saved);
+        appendAudit(currentUser, "ALERT_RULE_UPSERT", "ALERT_RULE", saved.id(), "SUCCESS");
+        return saved;
+    }
+
+    public synchronized AlertRule setAlertRuleEnabled(String ruleId, boolean enabled, CurrentUser currentUser) {
+        requirePermission(currentUser, "alerts:write");
+        AlertRule rule = requireAlertRule(ruleId, currentUser);
+        AlertRule saved = new AlertRule(
+                rule.id(), rule.name(), rule.objectId(), rule.objectName(), rule.metricCode(), rule.operator(), rule.threshold(),
+                rule.windowSeconds(), rule.durationSeconds(), rule.evaluationIntervalSeconds(), rule.severity(), enabled,
+                rule.businessLine(), rule.appId(), rule.onCallGroupId(), rule.createdAt(), OffsetDateTime.now()
+        );
+        alertRules.removeIf(item -> item.id().equals(rule.id()));
+        alertRules.add(saved);
+        appendAudit(currentUser, enabled ? "ALERT_RULE_ENABLE" : "ALERT_RULE_DISABLE", "ALERT_RULE", saved.id(), "SUCCESS");
+        return saved;
+    }
+
+    public AlertRuleRuntime alertRuleRuntime(String ruleId, CurrentUser currentUser) {
+        AlertRule rule = requireAlertRule(ruleId, currentUser);
+        return Optional.ofNullable(alertRuleRuntimes.get(rule.id()))
+                .orElseGet(() -> new AlertRuleRuntime(rule.id(), null, null, "PENDING", null, null, null, rule.updatedAt()));
+    }
+
+    public List<AlertEvaluationSample> alertEvaluationSamples(String ruleId, CurrentUser currentUser) {
+        AlertRule rule = requireAlertRule(ruleId, currentUser);
+        return alertEvaluationSamples.stream()
+                .filter(sample -> sample.ruleId().equals(rule.id()))
+                .sorted(Comparator.comparing(AlertEvaluationSample::evaluatedAt).reversed())
+                .toList();
+    }
+
+    public synchronized AlertRuleRuntime recordAlertEvaluation(AlertRule rule, String status, Double value, boolean matched, String eventId, String error, long evaluationDurationMs, CurrentUser currentUser) {
+        OffsetDateTime now = OffsetDateTime.now();
+        OffsetDateTime nextEvaluateAt = now.plusSeconds(Math.max(rule.evaluationIntervalSeconds(), 1));
+        String normalizedStatus = status == null || status.isBlank() ? "FAILED" : status.toUpperCase();
+        AlertRuleRuntime runtime = new AlertRuleRuntime(
+                rule.id(),
+                now,
+                nextEvaluateAt,
+                normalizedStatus,
+                value,
+                error,
+                evaluationDurationMs,
+                now
+        );
+        alertRuleRuntimes.put(rule.id(), runtime);
+        alertEvaluationSamples.add(new AlertEvaluationSample(
+                "alert-sample-" + alertEvaluationSampleSequence.incrementAndGet(),
+                rule.id(),
+                now,
+                normalizedStatus,
+                value,
+                rule.threshold(),
+                rule.operator(),
+                matched,
+                eventId,
+                error,
+                evaluationDurationMs,
+                now
+        ));
+        return runtime;
+    }
+
+    public List<AlertEvent> alertEvents(CurrentUser currentUser, String status) {
+        requirePermission(currentUser, "alerts:read");
+        Set<String> visibleRuleIds = alertRules(currentUser).stream().map(AlertRule::id).collect(java.util.stream.Collectors.toSet());
+        return alertEvents.stream()
+                .filter(event -> visibleRuleIds.contains(event.ruleId()))
+                .filter(event -> status == null || event.status().equalsIgnoreCase(status))
+                .sorted(Comparator.comparing(AlertEvent::updatedAt).reversed())
+                .toList();
+    }
+
+    public synchronized AlertEvent upsertTriggeredAlert(AlertRule rule, double triggerValue, CurrentUser currentUser) {
+        String existingActiveStatus = "CLOSED";
+        Optional<AlertEvent> existing = alertEvents.stream()
+                .filter(event -> event.ruleId().equals(rule.id()))
+                .filter(event -> !isTerminalAlertStatus(event.status()))
+                .findFirst();
+        if (existing.isPresent()) {
+            AlertEvent event = existing.get();
+            AlertEvent updated = new AlertEvent(
+                    event.id(), event.ruleId(), event.ruleName(), event.objectId(), event.objectName(), event.metricCode(),
+                    event.severity(), event.status(), triggerValue, event.threshold(), event.operator(), event.assigneeUserId(),
+                    event.closeReason(), event.triggeredAt(), event.notifiedAt(), event.acknowledgedAt(), event.processingAt(),
+                    event.recoveredAt(), event.closedAt(), OffsetDateTime.now()
+            );
+            alertEvents.removeIf(item -> item.id().equals(updated.id()));
+            alertEvents.add(updated);
+            return updated;
+        }
+        OffsetDateTime now = OffsetDateTime.now();
+        AlertEvent created = new AlertEvent(
+                "alert-event-" + alertEventSequence.incrementAndGet(),
+                rule.id(),
+                rule.name(),
+                rule.objectId(),
+                rule.objectName(),
+                rule.metricCode(),
+                rule.severity(),
+                "TRIGGERED",
+                triggerValue,
+                rule.threshold(),
+                rule.operator(),
+                null,
+                null,
+                now,
+                null,
+                null,
+                null,
+                null,
+                null,
+                now
+        );
+        alertEvents.add(created);
+        appendAlertHistory(created.id(), null, "TRIGGERED", "TRIGGER", currentUser.user().id(), "Threshold condition matched");
+        appendAudit(currentUser, "ALERT_EVENT_TRIGGER", "ALERT_EVENT", created.id(), "SUCCESS");
+        return created;
+    }
+
+    public synchronized AlertEvent recoverActiveAlert(AlertRule rule, double latestValue, CurrentUser currentUser) {
+        AlertEvent event = alertEvents.stream()
+                .filter(item -> item.ruleId().equals(rule.id()))
+                .filter(item -> !isTerminalAlertStatus(item.status()))
+                .findFirst()
+                .orElseThrow(() -> new NotFoundException("Active alert event not found"));
+        return transition(event, "RECOVERED", "RECOVER", "Metric recovered at " + latestValue, currentUser);
+    }
+
+    public synchronized AlertEvent transitionAlertEvent(String eventId, String action, String message, CurrentUser currentUser) {
+        requirePermission(currentUser, "alerts:write");
+        AlertEvent event = alertEvents(currentUser, null).stream()
+                .filter(item -> item.id().equals(eventId))
+                .findFirst()
+                .orElseThrow(() -> new NotFoundException("Alert event not found"));
+        String normalizedAction = action == null ? "" : action.toUpperCase();
+        String nextStatus = switch (normalizedAction) {
+            case "ACKNOWLEDGE" -> "ACKNOWLEDGED";
+            case "PROCESS" -> "PROCESSING";
+            case "CLOSE" -> "CLOSED";
+            case "RECOVER" -> "RECOVERED";
+            case "NOTIFY_SUCCESS" -> "NOTIFIED";
+            case "NOTIFY_FAILED" -> "NOTIFICATION_FAILED";
+            default -> throw new ApiException(ErrorCode.VALIDATION_FAILED, 400, "Unsupported alert action");
+        };
+        if ("CLOSE".equals(normalizedAction) && (message == null || message.isBlank())) {
+            throw new ApiException(ErrorCode.VALIDATION_FAILED, 400, "Close reason is required");
+        }
+        validateAlertTransition(event.status(), normalizedAction);
+        return transition(event, nextStatus, normalizedAction, message, currentUser);
+    }
+
+    public List<AlertEventHistory> alertEventHistory(String eventId, CurrentUser currentUser) {
+        alertEvents(currentUser, null).stream()
+                .filter(event -> event.id().equals(eventId))
+                .findFirst()
+                .orElseThrow(() -> new NotFoundException("Alert event not found"));
+        return alertEventHistories.stream()
+                .filter(history -> history.eventId().equals(eventId))
+                .sorted(Comparator.comparing(AlertEventHistory::operatedAt))
+                .toList();
+    }
+
+    public List<NotificationRecord> notificationRecords(CurrentUser currentUser, String eventId) {
+        requirePermission(currentUser, "alerts:read");
+        Set<String> visibleEventIds = alertEvents(currentUser, null).stream().map(AlertEvent::id).collect(java.util.stream.Collectors.toSet());
+        return notificationRecords.stream()
+                .filter(record -> eventId == null || record.eventId().equals(eventId))
+                .filter(record -> visibleEventIds.contains(record.eventId()))
+                .sorted(Comparator.comparing(NotificationRecord::createdAt).reversed())
+                .toList();
+    }
+
+    public synchronized NotificationRecord recordNotification(String eventId, String ruleId, String receiver, boolean success, String failureReason, CurrentUser currentUser) {
+        OffsetDateTime now = OffsetDateTime.now();
+        NotificationRecord record = new NotificationRecord(
+                "notification-" + notificationSequence.incrementAndGet(),
+                eventId,
+                ruleId,
+                "EMAIL",
+                receiver,
+                success ? "SENT" : "FAILED",
+                success ? 0 : 1,
+                failureReason,
+                success ? null : now.plusMinutes(5),
+                success ? now : null,
+                now
+        );
+        notificationRecords.add(record);
+        AlertEvent event = alertEvents.stream().filter(item -> item.id().equals(eventId)).findFirst().orElseThrow();
+        String nextStatus = success ? "NOTIFIED" : "NOTIFICATION_FAILED";
+        transition(event, nextStatus, success ? "NOTIFY_SUCCESS" : "NOTIFY_FAILED", failureReason, currentUser);
+        return record;
+    }
+
+    public List<NotificationRecord> dueNotificationRetries(CurrentUser currentUser, OffsetDateTime now, int limit) {
+        requirePermission(currentUser, "alerts:write");
+        Set<String> retryableEventIds = alertEvents(currentUser, null).stream()
+                .filter(event -> "NOTIFICATION_FAILED".equalsIgnoreCase(event.status()))
+                .map(AlertEvent::id)
+                .collect(java.util.stream.Collectors.toSet());
+        return notificationRecords.stream()
+                .filter(record -> retryableEventIds.contains(record.eventId()))
+                .filter(record -> "FAILED".equalsIgnoreCase(record.status()))
+                .filter(record -> record.nextRetryAt() != null && !record.nextRetryAt().isAfter(now))
+                .filter(record -> record.retryCount() < MAX_NOTIFICATION_RETRY_COUNT)
+                .sorted(Comparator.comparing(NotificationRecord::nextRetryAt))
+                .limit(Math.max(limit, 1))
+                .toList();
+    }
+
+    public synchronized NotificationRecord recordNotificationRetry(String notificationId, boolean success, String failureReason, CurrentUser currentUser) {
+        requirePermission(currentUser, "alerts:write");
+        NotificationRecord current = notificationRecords(currentUser, null).stream()
+                .filter(record -> record.id().equals(notificationId))
+                .findFirst()
+                .orElseThrow(() -> new NotFoundException("Notification record not found"));
+        AlertEvent event = alertEvents(currentUser, null).stream()
+                .filter(item -> item.id().equals(current.eventId()))
+                .findFirst()
+                .orElseThrow(() -> new NotFoundException("Alert event not found"));
+        if (!"NOTIFICATION_FAILED".equalsIgnoreCase(event.status())) {
+            throw new ApiException(ErrorCode.ALERT_STATUS_CONFLICT, 409, "Alert event is not waiting for notification retry");
+        }
+
+        OffsetDateTime now = OffsetDateTime.now();
+        int retryCount = current.retryCount() + 1;
+        NotificationRecord updated = new NotificationRecord(
+                current.id(),
+                current.eventId(),
+                current.ruleId(),
+                current.channelType(),
+                current.receiver(),
+                success ? "SENT" : "FAILED",
+                retryCount,
+                failureReason,
+                success || retryCount >= MAX_NOTIFICATION_RETRY_COUNT ? null : now.plusMinutes(5),
+                success ? now : current.sentAt(),
+                current.createdAt()
+        );
+        notificationRecords.removeIf(record -> record.id().equals(current.id()));
+        notificationRecords.add(updated);
+        transition(event, success ? "NOTIFIED" : "NOTIFICATION_FAILED", success ? "NOTIFY_SUCCESS" : "NOTIFY_FAILED", failureReason, currentUser);
+        return updated;
+    }
+
+    public List<OnCallGroup> onCallGroups(CurrentUser currentUser) {
+        requirePermission(currentUser, "alerts:read");
+        return onCallGroups.stream()
+                .filter(group -> currentUser.dataScope().platformAdmin() || currentUser.dataScope().businessLines().contains(group.businessLine()))
+                .sorted(Comparator.comparing(OnCallGroup::code))
+                .toList();
+    }
+
+    private AlertEvent transition(AlertEvent event, String nextStatus, String action, String message, CurrentUser currentUser) {
+        OffsetDateTime now = OffsetDateTime.now();
+        AlertEvent updated = new AlertEvent(
+                event.id(), event.ruleId(), event.ruleName(), event.objectId(), event.objectName(), event.metricCode(),
+                event.severity(), nextStatus, event.triggerValue(), event.threshold(), event.operator(),
+                "ACKNOWLEDGE".equals(action) || "PROCESS".equals(action) ? currentUser.user().id() : event.assigneeUserId(),
+                "CLOSED".equals(nextStatus) ? message : event.closeReason(),
+                event.triggeredAt(),
+                "NOTIFIED".equals(nextStatus) ? now : event.notifiedAt(),
+                "ACKNOWLEDGED".equals(nextStatus) ? now : event.acknowledgedAt(),
+                "PROCESSING".equals(nextStatus) ? now : event.processingAt(),
+                "RECOVERED".equals(nextStatus) ? now : event.recoveredAt(),
+                "CLOSED".equals(nextStatus) ? now : event.closedAt(),
+                now
+        );
+        alertEvents.removeIf(item -> item.id().equals(updated.id()));
+        alertEvents.add(updated);
+        appendAlertHistory(updated.id(), event.status(), nextStatus, action, currentUser.user().id(), message);
+        appendAudit(currentUser, "ALERT_EVENT_" + action, "ALERT_EVENT", updated.id(), "SUCCESS");
+        return updated;
+    }
+
+    private void appendAlertHistory(String eventId, String fromStatus, String toStatus, String action, String operatorUserId, String message) {
+        alertEventHistories.add(new AlertEventHistory(
+                "alert-history-" + alertHistorySequence.incrementAndGet(),
+                eventId,
+                fromStatus,
+                toStatus,
+                action,
+                operatorUserId,
+                message,
+                OffsetDateTime.now()
+        ));
+    }
+
+    private static void validateAlertTransition(String currentStatus, String action) {
+        String status = currentStatus == null ? "" : currentStatus.toUpperCase();
+        if (isTerminalAlertStatus(status)) {
+            throw new ApiException(ErrorCode.VALIDATION_FAILED, 400, "Alert event is already terminal");
+        }
+        if ("ACKNOWLEDGE".equals(action) && !Set.of("TRIGGERED", "NOTIFIED", "NOTIFICATION_FAILED").contains(status)) {
+            throw new ApiException(ErrorCode.VALIDATION_FAILED, 400, "Alert event cannot be acknowledged from current status");
+        }
+        if ("PROCESS".equals(action) && !Set.of("TRIGGERED", "NOTIFIED", "NOTIFICATION_FAILED", "ACKNOWLEDGED").contains(status)) {
+            throw new ApiException(ErrorCode.VALIDATION_FAILED, 400, "Alert event cannot be processed from current status");
+        }
+    }
+
+    private static boolean isTerminalAlertStatus(String status) {
+        return status != null && Set.of("RECOVERED", "CLOSED").contains(status.toUpperCase());
     }
 
     private static double sampleValue(String metricCode, int index) {

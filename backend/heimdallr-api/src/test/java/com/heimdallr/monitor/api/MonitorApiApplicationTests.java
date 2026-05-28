@@ -270,6 +270,189 @@ class MonitorApiApplicationTests {
         assertThat(agentsResponse.body()).contains("\"status\":\"CONFIG_ERROR\"");
     }
 
+    @Test
+    void sprint3AlertRuleEvaluationStateTransitionsAndNotificationRecordsWork() throws Exception {
+        HttpResponse<String> createRuleResponse = post(
+                "/api/v1/alerts/rules",
+                "admin-token",
+                "{\"name\":\"Kafka lag smoke\",\"objectId\":\"obj-kafka-orders\",\"metricCode\":\"mq_lag\",\"operator\":\">\",\"threshold\":1000,\"windowSeconds\":300,\"durationSeconds\":60,\"evaluationIntervalSeconds\":60,\"severity\":\"P1\",\"enabled\":false,\"onCallGroupId\":\"trade-oncall\"}"
+        );
+
+        assertThat(createRuleResponse.statusCode()).isEqualTo(200);
+        assertThat(createRuleResponse.body()).contains("\"name\":\"Kafka lag smoke\"");
+        String ruleId = extractJsonString(createRuleResponse.body(), "id");
+
+        HttpResponse<String> enableResponse = post("/api/v1/alerts/rules/" + ruleId + "/enable", "admin-token", "{}");
+        assertThat(enableResponse.statusCode()).isEqualTo(200);
+        assertThat(enableResponse.body()).contains("\"enabled\":true");
+
+        HttpResponse<String> filteredRulesResponse = get("/api/v1/alerts/rules?enabled=true&severity=P1&keyword=Kafka", "admin-token", null);
+        assertThat(filteredRulesResponse.statusCode()).isEqualTo(200);
+        assertThat(filteredRulesResponse.body()).contains("\"id\":\"" + ruleId + "\"");
+
+        HttpResponse<String> evaluateResponse = post("/api/v1/alerts/rules/" + ruleId + "/evaluate", "admin-token", "{}");
+        assertThat(evaluateResponse.statusCode()).isEqualTo(200);
+        assertThat(evaluateResponse.body()).contains("\"ruleId\":\"" + ruleId + "\"");
+        assertThat(evaluateResponse.body()).contains("\"status\":\"NOTIFIED\"");
+        String eventId = extractJsonString(evaluateResponse.body(), "id");
+
+        HttpResponse<String> filteredEventsResponse = get("/api/v1/alerts/events?status=notified&severity=P1&keyword=Kafka", "admin-token", null);
+        assertThat(filteredEventsResponse.statusCode()).isEqualTo(200);
+        assertThat(filteredEventsResponse.body()).contains("\"id\":\"" + eventId + "\"");
+
+        HttpResponse<String> runtimeResponse = get("/api/v1/alerts/rules/" + ruleId + "/runtime", "admin-token", null);
+        assertThat(runtimeResponse.statusCode()).isEqualTo(200);
+        assertThat(runtimeResponse.body()).contains("\"ruleId\":\"" + ruleId + "\"");
+        assertThat(runtimeResponse.body()).contains("\"lastStatus\":\"MATCHED\"");
+        assertThat(runtimeResponse.body()).contains("\"lastValue\":");
+        assertThat(runtimeResponse.body()).contains("\"nextEvaluateAt\"");
+
+        HttpResponse<String> samplesResponse = get("/api/v1/alerts/rules/" + ruleId + "/samples", "admin-token", null);
+        assertThat(samplesResponse.statusCode()).isEqualTo(200);
+        assertThat(samplesResponse.body()).contains("\"total\":1");
+        assertThat(samplesResponse.body()).contains("\"status\":\"MATCHED\"");
+        assertThat(samplesResponse.body()).contains("\"matched\":true");
+        assertThat(samplesResponse.body()).contains("\"eventId\":\"" + eventId + "\"");
+
+        HttpResponse<String> notificationsResponse = get("/api/v1/alerts/notifications?eventId=" + eventId, "admin-token", null);
+        assertThat(notificationsResponse.statusCode()).isEqualTo(200);
+        assertThat(notificationsResponse.body()).contains("\"eventId\":\"" + eventId + "\"");
+        assertThat(notificationsResponse.body()).contains("\"status\":\"SENT\"");
+
+        HttpResponse<String> duplicateEvaluateResponse = post("/api/v1/alerts/rules/" + ruleId + "/evaluate", "admin-token", "{}");
+        assertThat(duplicateEvaluateResponse.statusCode()).isEqualTo(200);
+        assertThat(duplicateEvaluateResponse.body()).contains("\"id\":\"" + eventId + "\"");
+        assertThat(duplicateEvaluateResponse.body()).contains("\"status\":\"NOTIFIED\"");
+
+        HttpResponse<String> acknowledgeResponse = post(
+                "/api/v1/alerts/events/" + eventId + "/actions",
+                "admin-token",
+                "{\"action\":\"ACKNOWLEDGE\",\"message\":\"ack\"}"
+        );
+        assertThat(acknowledgeResponse.statusCode()).isEqualTo(200);
+        assertThat(acknowledgeResponse.body()).contains("\"status\":\"ACKNOWLEDGED\"");
+
+        HttpResponse<String> processResponse = post(
+                "/api/v1/alerts/events/" + eventId + "/actions",
+                "admin-token",
+                "{\"action\":\"PROCESS\",\"message\":\"checking consumer\"}"
+        );
+        assertThat(processResponse.statusCode()).isEqualTo(200);
+        assertThat(processResponse.body()).contains("\"status\":\"PROCESSING\"");
+
+        HttpResponse<String> closeResponse = post(
+                "/api/v1/alerts/events/" + eventId + "/actions",
+                "admin-token",
+                "{\"action\":\"CLOSE\",\"message\":\"consumer restarted\"}"
+        );
+        assertThat(closeResponse.statusCode()).isEqualTo(200);
+        assertThat(closeResponse.body()).contains("\"status\":\"CLOSED\"");
+
+        HttpResponse<String> illegalAcknowledgeResponse = post(
+                "/api/v1/alerts/events/" + eventId + "/actions",
+                "admin-token",
+                "{\"action\":\"ACKNOWLEDGE\",\"message\":\"late ack\"}"
+        );
+        assertThat(illegalAcknowledgeResponse.statusCode()).isEqualTo(400);
+        assertThat(illegalAcknowledgeResponse.body()).contains("Alert event is already terminal");
+
+        HttpResponse<String> historyResponse = get("/api/v1/alerts/events/" + eventId + "/history", "admin-token", null);
+        assertThat(historyResponse.statusCode()).isEqualTo(200);
+        assertThat(historyResponse.body()).contains("\"action\":\"TRIGGER\"");
+        assertThat(historyResponse.body()).contains("\"action\":\"CLOSE\"");
+    }
+
+    @Test
+    void sprint3AlertViewerCannotMutateRulesOrEvents() throws Exception {
+        HttpResponse<String> createRuleResponse = post(
+                "/api/v1/alerts/rules",
+                "admin-token",
+                kafkaRuleBody("Kafka viewer permission smoke", 1000, true)
+        );
+        assertThat(createRuleResponse.statusCode()).isEqualTo(200);
+        String ruleId = extractJsonString(createRuleResponse.body(), "id");
+
+        HttpResponse<String> evaluateResponse = post("/api/v1/alerts/rules/" + ruleId + "/evaluate", "admin-token", "{}");
+        assertThat(evaluateResponse.statusCode()).isEqualTo(200);
+        String eventId = extractJsonString(evaluateResponse.body(), "id");
+
+        HttpResponse<String> viewerRulesResponse = get("/api/v1/alerts/rules?keyword=viewer", "alert-viewer-token", null);
+        assertThat(viewerRulesResponse.statusCode()).isEqualTo(200);
+        assertThat(viewerRulesResponse.body()).contains("\"id\":\"" + ruleId + "\"");
+
+        assertMissingAlertWrite(post("/api/v1/alerts/rules", "alert-viewer-token", kafkaRuleBody("viewer denied create", 1000, false)));
+        assertMissingAlertWrite(put("/api/v1/alerts/rules/" + ruleId, "alert-viewer-token", kafkaRuleBody("viewer denied update", 1000, false)));
+        assertMissingAlertWrite(post("/api/v1/alerts/rules/" + ruleId + "/enable", "alert-viewer-token", "{}"));
+        assertMissingAlertWrite(post("/api/v1/alerts/rules/" + ruleId + "/disable", "alert-viewer-token", "{}"));
+        assertMissingAlertWrite(post("/api/v1/alerts/rules/" + ruleId + "/evaluate", "alert-viewer-token", "{}"));
+        assertMissingAlertWrite(post("/api/v1/alerts/rules/evaluate", "alert-viewer-token", "{}"));
+        assertMissingAlertWrite(post("/api/v1/alerts/rules/evaluate-due", "alert-viewer-token", "{}"));
+        assertMissingAlertWrite(post("/api/v1/alerts/notifications/retry-due", "alert-viewer-token", "{}"));
+        assertMissingAlertWrite(post(
+                "/api/v1/alerts/events/" + eventId + "/actions",
+                "alert-viewer-token",
+                "{\"action\":\"ACKNOWLEDGE\",\"message\":\"viewer should not ack\"}"
+        ));
+    }
+
+    @Test
+    void sprint3AlertAccessIsFilteredByUserScope() throws Exception {
+        HttpResponse<String> createRuleResponse = post(
+                "/api/v1/alerts/rules",
+                "admin-token",
+                "{\"name\":\"CMS redis scope smoke\",\"objectId\":\"obj-redis-cms\",\"metricCode\":\"redis_memory_usage\",\"operator\":\">\",\"threshold\":50,\"windowSeconds\":300,\"durationSeconds\":60,\"evaluationIntervalSeconds\":60,\"severity\":\"P2\",\"enabled\":true,\"onCallGroupId\":null}"
+        );
+        assertThat(createRuleResponse.statusCode()).isEqualTo(200);
+        String hiddenRuleId = extractJsonString(createRuleResponse.body(), "id");
+
+        HttpResponse<String> evaluateResponse = post("/api/v1/alerts/rules/" + hiddenRuleId + "/evaluate", "admin-token", "{}");
+        assertThat(evaluateResponse.statusCode()).isEqualTo(200);
+        String hiddenEventId = extractJsonString(evaluateResponse.body(), "id");
+
+        HttpResponse<String> visibleRulesResponse = get("/api/v1/alerts/rules?keyword=CMS", "ace-owner-token", null);
+        assertThat(visibleRulesResponse.statusCode()).isEqualTo(200);
+        assertThat(visibleRulesResponse.body()).doesNotContain("\"id\":\"" + hiddenRuleId + "\"");
+
+        HttpResponse<String> visibleEventsResponse = get("/api/v1/alerts/events?keyword=CMS", "ace-owner-token", null);
+        assertThat(visibleEventsResponse.statusCode()).isEqualTo(200);
+        assertThat(visibleEventsResponse.body()).doesNotContain("\"id\":\"" + hiddenEventId + "\"");
+
+        assertAlertNotFound(get("/api/v1/alerts/rules/" + hiddenRuleId, "ace-owner-token", null));
+        assertAlertNotFound(get("/api/v1/alerts/rules/" + hiddenRuleId + "/runtime", "ace-owner-token", null));
+        assertAlertNotFound(get("/api/v1/alerts/rules/" + hiddenRuleId + "/samples", "ace-owner-token", null));
+        assertAlertNotFound(post("/api/v1/alerts/rules/" + hiddenRuleId + "/enable", "ace-owner-token", "{}"));
+        assertAlertNotFound(post("/api/v1/alerts/rules/" + hiddenRuleId + "/evaluate", "ace-owner-token", "{}"));
+        assertAlertNotFound(put("/api/v1/alerts/rules/" + hiddenRuleId, "ace-owner-token", kafkaRuleBody("cross scope overwrite attempt", 1000, true)));
+        assertAlertNotFound(post(
+                "/api/v1/alerts/events/" + hiddenEventId + "/actions",
+                "ace-owner-token",
+                "{\"action\":\"ACKNOWLEDGE\",\"message\":\"cross scope should not ack\"}"
+        ));
+        assertAlertNotFound(get("/api/v1/alerts/events/" + hiddenEventId + "/history", "ace-owner-token", null));
+
+        HttpResponse<String> hiddenNotificationsResponse = get("/api/v1/alerts/notifications?eventId=" + hiddenEventId, "ace-owner-token", null);
+        assertThat(hiddenNotificationsResponse.statusCode()).isEqualTo(200);
+        assertThat(hiddenNotificationsResponse.body()).contains("\"total\":0");
+        assertThat(hiddenNotificationsResponse.body()).doesNotContain("\"eventId\":\"" + hiddenEventId + "\"");
+    }
+
+    @Test
+    void unsupportedAlertRuleDeleteReturnsMethodNotAllowed() throws Exception {
+        HttpResponse<String> createRuleResponse = post(
+                "/api/v1/alerts/rules",
+                "admin-token",
+                kafkaRuleBody("Kafka method guard smoke", 1000, true)
+        );
+        assertThat(createRuleResponse.statusCode()).isEqualTo(200);
+        String ruleId = extractJsonString(createRuleResponse.body(), "id");
+
+        HttpResponse<String> deleteResponse = delete("/api/v1/alerts/rules/" + ruleId, "admin-token");
+
+        assertThat(deleteResponse.statusCode()).isEqualTo(405);
+        assertThat(deleteResponse.body()).contains("\"code\":\"BAD_REQUEST\"");
+        assertThat(deleteResponse.body()).contains("Method not allowed");
+    }
+
     private HttpResponse<String> get(String path, String token, String requestId) throws IOException, InterruptedException {
         HttpRequest.Builder builder = HttpRequest.newBuilder()
                 .uri(URI.create("http://localhost:" + port + path))
@@ -324,5 +507,34 @@ class MonitorApiApplicationTests {
             index += needle.length();
         }
         return count;
+    }
+
+    private static String extractJsonString(String json, String fieldName) {
+        String needle = "\"" + fieldName + "\":\"";
+        int start = json.indexOf(needle);
+        assertThat(start).isGreaterThanOrEqualTo(0);
+        int valueStart = start + needle.length();
+        int valueEnd = json.indexOf("\"", valueStart);
+        assertThat(valueEnd).isGreaterThan(valueStart);
+        return json.substring(valueStart, valueEnd);
+    }
+
+    private static String kafkaRuleBody(String name, int threshold, boolean enabled) {
+        return "{\"name\":\"" + name + "\",\"objectId\":\"obj-kafka-orders\",\"metricCode\":\"mq_lag\",\"operator\":\">\",\"threshold\":"
+                + threshold
+                + ",\"windowSeconds\":300,\"durationSeconds\":60,\"evaluationIntervalSeconds\":60,\"severity\":\"P1\",\"enabled\":"
+                + enabled
+                + ",\"onCallGroupId\":\"trade-oncall\"}";
+    }
+
+    private static void assertMissingAlertWrite(HttpResponse<String> response) {
+        assertThat(response.statusCode()).isEqualTo(403);
+        assertThat(response.body()).contains("Missing permission: alerts:write");
+    }
+
+    private static void assertAlertNotFound(HttpResponse<String> response) {
+        assertThat(response.statusCode()).isEqualTo(404);
+        assertThat(response.body()).contains("Alert");
+        assertThat(response.body()).contains("not found");
     }
 }

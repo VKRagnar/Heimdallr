@@ -1,5 +1,16 @@
 # Heimdallr Data Monitor
 
+## Project Progress Handoff
+
+Before starting work in a new session, read `project/PROJECT_PROGRESS.md`. Keep that file updated with current progress, verification evidence, blockers, and next actions.
+
+## Agent Team Workflow
+
+This repository uses a focused Agent team workflow for software delivery: Architecture -> Exploration -> Implementation -> Testing -> Review.
+
+- Start with `AGENTS.md` for repository-level Agent rules.
+- Use `project/AGENT_TEAM.md` for the full role model, handoff template, routing rules, and verification gates.
+
 Heimdallr Data Monitor 是一个企业级统一监控平台，当前覆盖应用资产、服务器资产、用户权限、审计事件和基础可观测能力。仓库包含前端控制台、后端 API、多模块领域代码、数据库迁移脚本、部署依赖和前期产品/架构设计文档。
 
 ## 当前状态

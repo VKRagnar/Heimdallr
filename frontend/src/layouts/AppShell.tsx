@@ -1,6 +1,7 @@
 import {
   AppstoreOutlined,
   AuditOutlined,
+  BellOutlined,
   DashboardOutlined,
   DatabaseOutlined,
   DeploymentUnitOutlined,
@@ -25,6 +26,7 @@ const navItems: MenuProps['items'] = [
   { key: '/servers', icon: <DatabaseOutlined />, label: <Link to="/servers">服务器</Link> },
   { key: '/logs/search', icon: <FileSearchOutlined />, label: <Link to="/logs/search">日志查询</Link> },
   { key: '/metrics', icon: <LineChartOutlined />, label: <Link to="/metrics">指标查询</Link> },
+  { key: '/alerts', icon: <BellOutlined />, label: <Link to="/alerts">Alerts</Link> },
   {
     key: 'access',
     icon: <DeploymentUnitOutlined />,
@@ -51,6 +53,7 @@ function getSelectedKey(pathname: string) {
   if (pathname.startsWith('/applications/')) return '/applications';
   if (pathname.startsWith('/logs/search')) return '/logs/search';
   if (pathname.startsWith('/metrics')) return '/metrics';
+  if (pathname.startsWith('/alerts')) return '/alerts';
   if (pathname.startsWith('/access/applications')) return '/access/applications';
   if (pathname.startsWith('/access/data-sources')) return '/access/data-sources';
   if (pathname.startsWith('/access/agents')) return '/access/agents';

@@ -1,11 +1,18 @@
 package com.heimdallr.monitor.api.repository;
 
 import com.heimdallr.monitor.api.fixture.InMemoryMonitorData;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.heimdallr.monitor.common.domain.api.ErrorCode;
 import com.heimdallr.monitor.common.domain.exception.ApiException;
 import com.heimdallr.monitor.common.domain.exception.ForbiddenException;
 import com.heimdallr.monitor.common.domain.exception.NotFoundException;
 import com.heimdallr.monitor.common.domain.model.AgentInstance;
+import com.heimdallr.monitor.common.domain.model.AlertEvent;
+import com.heimdallr.monitor.common.domain.model.AlertEventHistory;
+import com.heimdallr.monitor.common.domain.model.AlertEvaluationSample;
+import com.heimdallr.monitor.common.domain.model.AlertRule;
+import com.heimdallr.monitor.common.domain.model.AlertRuleRuntime;
 import com.heimdallr.monitor.common.domain.model.ApplicationAsset;
 import com.heimdallr.monitor.common.domain.model.AuditEvent;
 import com.heimdallr.monitor.common.domain.model.DataSourceBinding;
@@ -16,14 +23,25 @@ import com.heimdallr.monitor.common.domain.model.LogEntry;
 import com.heimdallr.monitor.common.domain.model.MetricDefinition;
 import com.heimdallr.monitor.common.domain.model.MetricSeries;
 import com.heimdallr.monitor.common.domain.model.MonitorObject;
+import com.heimdallr.monitor.common.domain.model.NotificationRecord;
+import com.heimdallr.monitor.common.domain.model.OnCallGroup;
 import com.heimdallr.monitor.common.domain.model.RoleInfo;
 import com.heimdallr.monitor.common.domain.model.ServerAsset;
 import com.heimdallr.monitor.common.domain.model.UserInfo;
 import com.heimdallr.monitor.common.security.CurrentUser;
+import java.io.IOException;
+import java.net.URI;
+import java.net.URLEncoder;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.Duration;
+import java.time.Instant;
 import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -40,6 +58,24 @@ import org.springframework.transaction.annotation.Transactional;
 @Repository
 @Profile("db")
 public class JdbcMonitorData extends InMemoryMonitorData {
+    static final String UPSERT_TRIGGERED_ALERT_SQL = """
+            INSERT INTO alert_event (id, rule_id, dedup_key, object_id, metric_code, severity, status,
+                                     trigger_value, threshold, operator)
+            VALUES (:id, :ruleId, :dedupKey, :objectId, :metricCode, :severity, 'triggered',
+                    :triggerValue, :threshold, :operator)
+            ON CONFLICT (dedup_key)
+            WHERE deleted_at IS NULL AND status NOT IN ('recovered', 'closed')
+            DO UPDATE
+            SET trigger_value = EXCLUDED.trigger_value,
+                threshold = EXCLUDED.threshold,
+                operator = EXCLUDED.operator,
+                severity = EXCLUDED.severity,
+                last_seen_at = now(),
+                updated_at = now()
+            RETURNING id, (xmax = 0) AS inserted
+            """;
+    private static final int NOTIFICATION_RETRY_DELAY_MINUTES = 5;
+
     private static final Set<String> ALL_PERMISSIONS = Set.of(
             "applications:read",
             "applications:write",
@@ -52,13 +88,24 @@ public class JdbcMonitorData extends InMemoryMonitorData {
             "data-sources:write",
             "agents:read",
             "metrics:read",
-            "logs:read"
+            "logs:read",
+            "alerts:read",
+            "alerts:write"
     );
 
     private final JdbcClient jdbc;
+    private final ObjectMapper objectMapper;
+    private final HttpClient httpClient;
+
+    private record AlertEventUpsertResult(UUID id, boolean inserted) {
+    }
 
     public JdbcMonitorData(JdbcClient jdbc) {
         this.jdbc = jdbc;
+        this.objectMapper = new ObjectMapper().findAndRegisterModules();
+        this.httpClient = HttpClient.newBuilder()
+                .connectTimeout(Duration.ofSeconds(3))
+                .build();
     }
 
     @Override
@@ -445,12 +492,14 @@ public class JdbcMonitorData extends InMemoryMonitorData {
     @Override
     public DataSourceValidationResult validateDataSource(String sourceId, CurrentUser currentUser) {
         DataSourceConfig source = requireVisibleDataSource(sourceId, currentUser);
-        boolean passed = !"DISABLED".equalsIgnoreCase(source.status()) && !"UNHEALTHY".equalsIgnoreCase(source.status());
+        ValidationProbe probe = probeDataSource(source);
+        boolean basicConfigPassed = source.baseUrl() != null && source.baseUrl().startsWith("http");
+        boolean passed = basicConfigPassed && probe.passed();
         List<DataSourceValidationResult.ValidationItem> items = List.of(
-                validationItem("basic_config", source.baseUrl() != null && source.baseUrl().startsWith("http"), "CONFIG_INVALID", "Base URL is valid"),
-                validationItem("connectivity", passed, Optional.ofNullable(source.lastErrorCode()).orElse("CONNECT_TIMEOUT"), Optional.ofNullable(source.lastErrorMessage()).orElse("Connection test passed")),
-                validationItem("auth", source.secretRef() != null && !source.secretRef().isBlank(), "AUTH_FAILED", "Secret reference is configured"),
-                validationItem("sample_data", passed, "NO_DATA", "Recent sample data is available")
+                validationItem("basic_config", basicConfigPassed, "CONFIG_INVALID", "Base URL is valid"),
+                validationItem("connectivity", probe.passed(), probe.errorCode(), probe.message()),
+                validationItem("auth", true, "AUTH_FAILED", "No auth required for observability test stack"),
+                validationItem("sample_data", probe.passed(), "NO_DATA", "Recent sample data is available")
         );
         return new DataSourceValidationResult(
                 source.id(),
@@ -491,7 +540,10 @@ public class JdbcMonitorData extends InMemoryMonitorData {
                         rs.getString("config_version"),
                         rs.getString("failure_reason")
                 ))
-                .list();
+                .list()
+                .stream()
+                .map(agent -> mergeAgentGatewayStatus(currentUser, agent))
+                .toList();
     }
 
     @Override
@@ -554,6 +606,15 @@ public class JdbcMonitorData extends InMemoryMonitorData {
                 .orElseThrow(() -> new ApiException(ErrorCode.METRIC_NO_RECENT_DATA, 409, "Metric source is not connected"));
         OffsetDateTime end = to == null ? OffsetDateTime.now() : to;
         OffsetDateTime start = from == null ? end.minusMinutes(30) : from;
+        Optional<DataSourceConfig> source = visibleDataSources(currentUser).stream()
+                .filter(item -> item.id().equals(binding.sourceId()))
+                .findFirst();
+        if (source.isPresent() && "PROMETHEUS".equalsIgnoreCase(source.get().type())) {
+            List<MetricSeries.MetricSample> prometheusSamples = queryPrometheusSamples(source.get(), object.objectType(), metricCode, object.id(), definition.defaultQueryTemplate(), start, end);
+            if (!prometheusSamples.isEmpty()) {
+                return new MetricSeries(metricCode, object.id(), object.name(), definition.unit(), binding.sourceId(), start, end, prometheusSamples, binding.externalLabels());
+            }
+        }
         List<MetricSeries.MetricSample> samples = List.of(
                 new MetricSeries.MetricSample(start, sampleValue(metricCode, 0)),
                 new MetricSeries.MetricSample(start.plusMinutes(10), sampleValue(metricCode, 1)),
@@ -564,12 +625,499 @@ public class JdbcMonitorData extends InMemoryMonitorData {
     }
 
     @Override
+    public List<AlertRule> alertRules(CurrentUser currentUser) {
+        requirePermission(currentUser, "alerts:read");
+        return jdbc.sql("""
+                SELECT ar.id, ar.rule_name, ar.object_id, COALESCE(mo.name, ar.object_id) AS object_name,
+                       ar.metric_code, ar.operator, ar.threshold, ar.window_seconds, ar.duration_seconds,
+                       ar.evaluation_interval_seconds, ar.severity, ar.enabled, bl.code AS business_line,
+                       ar.app_id::text, COALESCE(ocg.code, ar.on_call_group_id::text) AS on_call_group_id,
+                       ar.created_at, ar.updated_at
+                FROM alert_rule ar
+                LEFT JOIN monitor_object mo ON mo.code = ar.object_id AND mo.deleted_at IS NULL
+                LEFT JOIN business_line bl ON bl.id = ar.business_line_id
+                LEFT JOIN on_call_group ocg ON ocg.id = ar.on_call_group_id
+                WHERE ar.deleted_at IS NULL
+                ORDER BY ar.updated_at DESC
+                """)
+                .query(this::alertRule)
+                .list().stream()
+                .filter(rule -> currentUser.dataScope().platformAdmin()
+                        || visibleMonitorObjects(currentUser).stream().anyMatch(object -> object.id().equals(rule.objectId())))
+                .toList();
+    }
+
+    @Override
+    public List<AlertRule> dueAlertRules(CurrentUser currentUser, OffsetDateTime now, int limit) {
+        requirePermission(currentUser, "alerts:write");
+        return alertRules(currentUser).stream()
+                .filter(AlertRule::enabled)
+                .filter(rule -> {
+                    AlertRuleRuntime runtime = alertRuleRuntime(rule.id(), currentUser);
+                    return runtime.nextEvaluateAt() == null || !runtime.nextEvaluateAt().isAfter(now);
+                })
+                .limit(Math.max(limit, 1))
+                .toList();
+    }
+
+    @Override
+    public AlertRule requireAlertRule(String ruleId, CurrentUser currentUser) {
+        return alertRules(currentUser).stream()
+                .filter(rule -> rule.id().equals(ruleId))
+                .findFirst()
+                .orElseThrow(() -> new NotFoundException("Alert rule not found"));
+    }
+
+    @Override
+    @Transactional
+    public AlertRule saveAlertRule(AlertRule rule, CurrentUser currentUser) {
+        requirePermission(currentUser, "alerts:write");
+        if (rule.id() != null && !rule.id().isBlank() && alertRuleExists(rule.id())) {
+            requireAlertRule(rule.id(), currentUser);
+        }
+        MonitorObject object = requireVisibleMonitorObject(rule.objectId(), currentUser);
+        UUID ruleId = rule.id() == null || rule.id().isBlank() ? UUID.randomUUID() : stableUuid(rule.id());
+        UUID businessLineId = businessLineIdByCode(object.businessLine()).orElseGet(() -> ensureBusinessLine(object.businessLine()));
+        UUID appId = object.applicationIds().stream().findFirst().flatMap(JdbcMonitorData::parseUuid).orElse(null);
+        UUID onCallGroupId = onCallGroupId(rule.onCallGroupId()).orElse(null);
+        jdbc.sql("""
+                INSERT INTO alert_rule (id, rule_name, object_id, metric_code, operator, threshold, window_seconds,
+                                        duration_seconds, evaluation_interval_seconds, severity, enabled,
+                                        business_line_id, app_id, on_call_group_id, created_by, updated_by)
+                VALUES (:id, :name, :objectId, :metricCode, :operator, :threshold, :windowSeconds,
+                        :durationSeconds, :evaluationIntervalSeconds, :severity, :enabled,
+                        :businessLineId, :appId, :onCallGroupId, :operatorUserId, :operatorUserId)
+                ON CONFLICT (id) DO UPDATE
+                SET rule_name = EXCLUDED.rule_name,
+                    object_id = EXCLUDED.object_id,
+                    metric_code = EXCLUDED.metric_code,
+                    operator = EXCLUDED.operator,
+                    threshold = EXCLUDED.threshold,
+                    window_seconds = EXCLUDED.window_seconds,
+                    duration_seconds = EXCLUDED.duration_seconds,
+                    evaluation_interval_seconds = EXCLUDED.evaluation_interval_seconds,
+                    severity = EXCLUDED.severity,
+                    enabled = EXCLUDED.enabled,
+                    business_line_id = EXCLUDED.business_line_id,
+                    app_id = EXCLUDED.app_id,
+                    on_call_group_id = EXCLUDED.on_call_group_id,
+                    updated_by = EXCLUDED.updated_by,
+                    updated_at = now()
+                """)
+                .param("id", ruleId)
+                .param("name", rule.name())
+                .param("objectId", object.id())
+                .param("metricCode", rule.metricCode())
+                .param("operator", rule.operator())
+                .param("threshold", rule.threshold())
+                .param("windowSeconds", Math.max(rule.windowSeconds(), 60))
+                .param("durationSeconds", Math.max(rule.durationSeconds(), 0))
+                .param("evaluationIntervalSeconds", Math.max(rule.evaluationIntervalSeconds(), 30))
+                .param("severity", rule.severity() == null || rule.severity().isBlank() ? "P2" : rule.severity())
+                .param("enabled", rule.enabled())
+                .param("businessLineId", businessLineId)
+                .param("appId", appId)
+                .param("onCallGroupId", onCallGroupId)
+                .param("operatorUserId", resolveUserId(currentUser).orElse(null))
+                .update();
+        appendAudit(currentUser, "ALERT_RULE_UPSERT", "ALERT_RULE", ruleId, "success");
+        return requireAlertRule(ruleId.toString(), currentUser);
+    }
+
+    @Override
+    @Transactional
+    public AlertRule setAlertRuleEnabled(String ruleId, boolean enabled, CurrentUser currentUser) {
+        requirePermission(currentUser, "alerts:write");
+        AlertRule rule = requireAlertRule(ruleId, currentUser);
+        UUID id = stableUuid(rule.id());
+        jdbc.sql("UPDATE alert_rule SET enabled = :enabled, updated_by = :userId, updated_at = now() WHERE id = :id")
+                .param("enabled", enabled)
+                .param("userId", resolveUserId(currentUser).orElse(null))
+                .param("id", id)
+                .update();
+        appendAudit(currentUser, enabled ? "ALERT_RULE_ENABLE" : "ALERT_RULE_DISABLE", "ALERT_RULE", id, "success");
+        return requireAlertRule(rule.id(), currentUser);
+    }
+
+    @Override
+    public AlertRuleRuntime alertRuleRuntime(String ruleId, CurrentUser currentUser) {
+        AlertRule rule = requireAlertRule(ruleId, currentUser);
+        return jdbc.sql("""
+                SELECT rule_id, last_evaluated_at, next_evaluate_at, last_status, last_value,
+                       last_error, evaluation_duration_ms, updated_at
+                FROM alert_rule_runtime
+                WHERE rule_id = :ruleId AND deleted_at IS NULL
+                """)
+                .param("ruleId", stableUuid(rule.id()))
+                .query(this::alertRuleRuntime)
+                .optional()
+                .orElseGet(() -> new AlertRuleRuntime(rule.id(), null, null, "pending", null, null, null, rule.updatedAt()));
+    }
+
+    @Override
+    public List<AlertEvaluationSample> alertEvaluationSamples(String ruleId, CurrentUser currentUser) {
+        AlertRule rule = requireAlertRule(ruleId, currentUser);
+        return jdbc.sql("""
+                SELECT id, rule_id, evaluated_at, status, metric_value, threshold, operator, matched,
+                       event_id, error, evaluation_duration_ms, created_at
+                FROM alert_evaluation_sample
+                WHERE rule_id = :ruleId AND deleted_at IS NULL
+                ORDER BY evaluated_at DESC, id DESC
+                LIMIT 50
+                """)
+                .param("ruleId", stableUuid(rule.id()))
+                .query(this::alertEvaluationSample)
+                .list();
+    }
+
+    @Override
+    @Transactional
+    public AlertRuleRuntime recordAlertEvaluation(AlertRule rule, String status, Double value, boolean matched, String eventId, String error, long evaluationDurationMs, CurrentUser currentUser) {
+        UUID ruleId = stableUuid(rule.id());
+        OffsetDateTime now = OffsetDateTime.now();
+        OffsetDateTime nextEvaluateAt = now.plusSeconds(Math.max(rule.evaluationIntervalSeconds(), 1));
+        String normalizedStatus = normalizeStatus(status, "failed");
+        jdbc.sql("""
+                INSERT INTO alert_rule_runtime (rule_id, last_evaluated_at, next_evaluate_at, last_status,
+                                                last_value, last_error, evaluation_duration_ms)
+                VALUES (:ruleId, :evaluatedAt, :nextEvaluateAt, :status, :value, :error, :durationMs)
+                ON CONFLICT (rule_id) DO UPDATE
+                SET last_evaluated_at = EXCLUDED.last_evaluated_at,
+                    next_evaluate_at = EXCLUDED.next_evaluate_at,
+                    last_status = EXCLUDED.last_status,
+                    last_value = EXCLUDED.last_value,
+                    last_error = EXCLUDED.last_error,
+                    evaluation_duration_ms = EXCLUDED.evaluation_duration_ms,
+                    deleted_at = NULL,
+                    updated_at = now()
+                """)
+                .param("ruleId", ruleId)
+                .param("evaluatedAt", now)
+                .param("nextEvaluateAt", nextEvaluateAt)
+                .param("status", normalizedStatus)
+                .param("value", value)
+                .param("error", error)
+                .param("durationMs", evaluationDurationMs)
+                .update();
+        jdbc.sql("""
+                INSERT INTO alert_evaluation_sample (rule_id, evaluated_at, status, metric_value, threshold,
+                                                     operator, matched, event_id, error, evaluation_duration_ms)
+                VALUES (:ruleId, :evaluatedAt, :status, :value, :threshold, :operator, :matched,
+                        :eventId, :error, :durationMs)
+                """)
+                .param("ruleId", ruleId)
+                .param("evaluatedAt", now)
+                .param("status", normalizedStatus)
+                .param("value", value)
+                .param("threshold", rule.threshold())
+                .param("operator", rule.operator())
+                .param("matched", matched)
+                .param("eventId", parseUuid(eventId).orElse(null))
+                .param("error", error)
+                .param("durationMs", evaluationDurationMs)
+                .update();
+        jdbc.sql("""
+                UPDATE alert_rule
+                SET last_evaluated_at = :evaluatedAt,
+                    last_error = :error,
+                    updated_at = updated_at
+                WHERE id = :ruleId
+                """)
+                .param("evaluatedAt", now)
+                .param("error", error)
+                .param("ruleId", ruleId)
+                .update();
+        return alertRuleRuntime(rule.id(), currentUser);
+    }
+
+    @Override
+    public List<AlertEvent> alertEvents(CurrentUser currentUser, String status) {
+        requirePermission(currentUser, "alerts:read");
+        Set<String> ruleIds = alertRules(currentUser).stream().map(AlertRule::id).collect(Collectors.toSet());
+        if (ruleIds.isEmpty()) {
+            return List.of();
+        }
+        return jdbc.sql("""
+                SELECT ae.id, ae.rule_id, ar.rule_name, ae.object_id, COALESCE(mo.name, ae.object_id) AS object_name,
+                       ae.metric_code, ae.severity, ae.status, ae.trigger_value, ae.threshold, ae.operator,
+                       ae.assignee_user_id::text, ae.close_reason, ae.triggered_at, ae.notified_at,
+                       ae.acknowledged_at, ae.processing_at, ae.recovered_at, ae.closed_at, ae.updated_at
+                FROM alert_event ae
+                JOIN alert_rule ar ON ar.id = ae.rule_id
+                LEFT JOIN monitor_object mo ON mo.code = ae.object_id AND mo.deleted_at IS NULL
+                WHERE ae.deleted_at IS NULL
+                  AND ae.rule_id::text = ANY(:ruleIds)
+                  AND (:status IS NULL OR lower(ae.status) = lower(:status))
+                ORDER BY ae.updated_at DESC
+                """)
+                .param("ruleIds", ruleIds.toArray(String[]::new))
+                .param("status", status)
+                .query(this::alertEvent)
+                .list();
+    }
+
+    @Override
+    @Transactional
+    public AlertEvent upsertTriggeredAlert(AlertRule rule, double triggerValue, CurrentUser currentUser) {
+        UUID ruleId = stableUuid(rule.id());
+        String dedupKey = rule.id() + ":" + rule.objectId() + ":" + rule.metricCode();
+        AlertEventUpsertResult upsert = jdbc.sql(UPSERT_TRIGGERED_ALERT_SQL)
+                .param("id", UUID.randomUUID())
+                .param("ruleId", ruleId)
+                .param("dedupKey", dedupKey)
+                .param("objectId", rule.objectId())
+                .param("metricCode", rule.metricCode())
+                .param("severity", rule.severity())
+                .param("triggerValue", triggerValue)
+                .param("threshold", rule.threshold())
+                .param("operator", rule.operator())
+                .query((rs, rowNum) -> new AlertEventUpsertResult(rs.getObject("id", UUID.class), rs.getBoolean("inserted")))
+                .single();
+        if (upsert.inserted()) {
+            UUID eventId = upsert.id();
+            appendAlertHistory(eventId, null, "triggered", "TRIGGER", resolveUserId(currentUser).orElse(null), "Threshold condition matched");
+            appendAudit(currentUser, "ALERT_EVENT_TRIGGER", "ALERT_EVENT", eventId, "success");
+        }
+        return alertEvents(currentUser, null).stream()
+                .filter(event -> event.id().equals(upsert.id().toString()))
+                .findFirst()
+                .orElseThrow(() -> new NotFoundException("Alert event not found"));
+    }
+
+    @Override
+    @Transactional
+    public AlertEvent recoverActiveAlert(AlertRule rule, double latestValue, CurrentUser currentUser) {
+        UUID eventId = jdbc.sql("""
+                SELECT id FROM alert_event
+                WHERE rule_id = :ruleId AND deleted_at IS NULL AND status NOT IN ('recovered', 'closed')
+                ORDER BY triggered_at DESC
+                LIMIT 1
+                """)
+                .param("ruleId", stableUuid(rule.id()))
+                .query(UUID.class)
+                .optional()
+                .orElseThrow(() -> new NotFoundException("Active alert event not found"));
+        return transitionAlertEvent(eventId.toString(), "RECOVER", "Metric recovered at " + latestValue, currentUser);
+    }
+
+    @Override
+    @Transactional
+    public AlertEvent transitionAlertEvent(String eventId, String action, String message, CurrentUser currentUser) {
+        requirePermission(currentUser, "alerts:write");
+        AlertEvent event = alertEvents(currentUser, null).stream()
+                .filter(item -> item.id().equals(eventId))
+                .findFirst()
+                .orElseThrow(() -> new NotFoundException("Alert event not found"));
+        String normalizedAction = action == null ? "" : action.toUpperCase();
+        String nextStatus = switch (normalizedAction) {
+            case "ACKNOWLEDGE" -> "acknowledged";
+            case "PROCESS" -> "processing";
+            case "RECOVER" -> "recovered";
+            case "NOTIFY_SUCCESS" -> "notified";
+            case "NOTIFY_FAILED" -> "notification_failed";
+            case "CLOSE" -> "closed";
+            default -> throw new ApiException(ErrorCode.VALIDATION_FAILED, 400, "Unsupported alert action");
+        };
+        if ("CLOSE".equals(normalizedAction) && (message == null || message.isBlank())) {
+            throw new ApiException(ErrorCode.VALIDATION_FAILED, 400, "Close reason is required");
+        }
+        validateAlertTransition(event.status(), normalizedAction);
+        UUID id = stableUuid(event.id());
+        jdbc.sql("""
+                UPDATE alert_event
+                SET status = :status,
+                    assignee_user_id = CASE WHEN :assign THEN :userId ELSE assignee_user_id END,
+                    close_reason = CASE WHEN :status = 'closed' THEN :message ELSE close_reason END,
+                    notified_at = CASE WHEN :status = 'notified' THEN now() ELSE notified_at END,
+                    acknowledged_at = CASE WHEN :status = 'acknowledged' THEN now() ELSE acknowledged_at END,
+                    processing_at = CASE WHEN :status = 'processing' THEN now() ELSE processing_at END,
+                    recovered_at = CASE WHEN :status = 'recovered' THEN now() ELSE recovered_at END,
+                    closed_at = CASE WHEN :status = 'closed' THEN now() ELSE closed_at END,
+                    updated_at = now()
+                WHERE id = :id
+                """)
+                .param("status", nextStatus)
+                .param("assign", Set.of("ACKNOWLEDGE", "PROCESS").contains(normalizedAction))
+                .param("userId", resolveUserId(currentUser).orElse(null))
+                .param("message", message)
+                .param("id", id)
+                .update();
+        appendAlertHistory(id, event.status(), nextStatus, normalizedAction, resolveUserId(currentUser).orElse(null), message);
+        appendAudit(currentUser, "ALERT_EVENT_" + normalizedAction, "ALERT_EVENT", id, "success");
+        return alertEvents(currentUser, null).stream()
+                .filter(item -> item.id().equals(eventId))
+                .findFirst()
+                .orElseThrow(() -> new NotFoundException("Alert event not found"));
+    }
+
+    @Override
+    public List<AlertEventHistory> alertEventHistory(String eventId, CurrentUser currentUser) {
+        alertEvents(currentUser, null).stream()
+                .filter(event -> event.id().equals(eventId))
+                .findFirst()
+                .orElseThrow(() -> new NotFoundException("Alert event not found"));
+        return jdbc.sql("""
+                SELECT id, event_id, from_status, to_status, action, operator_user_id::text, message, operated_at
+                FROM alert_event_history
+                WHERE event_id = :eventId AND deleted_at IS NULL
+                ORDER BY operated_at
+                """)
+                .param("eventId", stableUuid(eventId))
+                .query(this::alertEventHistory)
+                .list();
+    }
+
+    @Override
+    public List<NotificationRecord> notificationRecords(CurrentUser currentUser, String eventId) {
+        requirePermission(currentUser, "alerts:read");
+        Set<String> eventIds = alertEvents(currentUser, null).stream().map(AlertEvent::id).collect(Collectors.toSet());
+        if (eventIds.isEmpty()) {
+            return List.of();
+        }
+        return jdbc.sql("""
+                SELECT id, event_id, rule_id, channel_type, receiver, status, retry_count,
+                       failure_reason, next_retry_at, sent_at, created_at
+                FROM notification_record
+                WHERE deleted_at IS NULL
+                  AND event_id::text = ANY(:eventIds)
+                  AND (:eventId IS NULL OR event_id = :eventId)
+                ORDER BY created_at DESC
+                """)
+                .param("eventIds", eventIds.toArray(String[]::new))
+                .param("eventId", parseUuid(eventId).orElse(null))
+                .query(this::notificationRecord)
+                .list();
+    }
+
+    @Override
+    @Transactional
+    public NotificationRecord recordNotification(String eventId, String ruleId, String receiver, boolean success, String failureReason, CurrentUser currentUser) {
+        UUID id = UUID.randomUUID();
+        jdbc.sql("""
+                INSERT INTO notification_record (id, event_id, rule_id, channel_type, receiver, status, retry_count, failure_reason, next_retry_at, sent_at)
+                VALUES (:id, :eventId, :ruleId, 'email', :receiver, :status, :retryCount, :failureReason, :nextRetryAt, :sentAt)
+                """)
+                .param("id", id)
+                .param("eventId", stableUuid(eventId))
+                .param("ruleId", stableUuid(ruleId))
+                .param("receiver", receiver)
+                .param("status", success ? "sent" : "failed")
+                .param("retryCount", success ? 0 : 1)
+                .param("failureReason", failureReason)
+                .param("nextRetryAt", success ? null : OffsetDateTime.now().plusMinutes(5))
+                .param("sentAt", success ? OffsetDateTime.now() : null)
+                .update();
+        transitionAlertEvent(eventId, success ? "NOTIFY_SUCCESS" : "NOTIFY_FAILED", failureReason, currentUser);
+        return notificationRecords(currentUser, eventId).stream()
+                .filter(record -> record.id().equals(id.toString()))
+                .findFirst()
+                .orElseThrow(() -> new NotFoundException("Notification record not found"));
+    }
+
+    @Override
+    public List<NotificationRecord> dueNotificationRetries(CurrentUser currentUser, OffsetDateTime now, int limit) {
+        requirePermission(currentUser, "alerts:write");
+        Set<String> eventIds = alertEvents(currentUser, null).stream()
+                .filter(event -> "notification_failed".equalsIgnoreCase(event.status()))
+                .map(AlertEvent::id)
+                .collect(Collectors.toSet());
+        if (eventIds.isEmpty()) {
+            return List.of();
+        }
+        return jdbc.sql("""
+                SELECT id, event_id, rule_id, channel_type, receiver, status, retry_count,
+                       failure_reason, next_retry_at, sent_at, created_at
+                FROM notification_record
+                WHERE deleted_at IS NULL
+                  AND event_id::text = ANY(:eventIds)
+                  AND lower(status) = 'failed'
+                  AND next_retry_at IS NOT NULL
+                  AND next_retry_at <= :now
+                  AND retry_count < max_retry_count
+                ORDER BY next_retry_at, created_at
+                LIMIT :limit
+                """)
+                .param("eventIds", eventIds.toArray(String[]::new))
+                .param("now", now)
+                .param("limit", Math.max(limit, 1))
+                .query(this::notificationRecord)
+                .list();
+    }
+
+    @Override
+    @Transactional
+    public NotificationRecord recordNotificationRetry(String notificationId, boolean success, String failureReason, CurrentUser currentUser) {
+        requirePermission(currentUser, "alerts:write");
+        NotificationRecord current = notificationRecords(currentUser, null).stream()
+                .filter(record -> record.id().equals(notificationId))
+                .findFirst()
+                .orElseThrow(() -> new NotFoundException("Notification record not found"));
+        AlertEvent event = alertEvents(currentUser, null).stream()
+                .filter(item -> item.id().equals(current.eventId()))
+                .findFirst()
+                .orElseThrow(() -> new NotFoundException("Alert event not found"));
+        if (!"notification_failed".equalsIgnoreCase(event.status())) {
+            throw new ApiException(ErrorCode.ALERT_STATUS_CONFLICT, 409, "Alert event is not waiting for notification retry");
+        }
+
+        jdbc.sql("""
+                UPDATE notification_record
+                SET status = :status,
+                    retry_count = retry_count + 1,
+                    failure_reason = :failureReason,
+                    next_retry_at = CASE
+                        WHEN :success THEN NULL
+                        WHEN retry_count + 1 >= max_retry_count THEN NULL
+                        ELSE now() + (:retryDelayMinutes * interval '1 minute')
+                    END,
+                    sent_at = CASE WHEN :success THEN now() ELSE sent_at END,
+                    updated_at = now()
+                WHERE id = :id AND deleted_at IS NULL
+                """)
+                .param("status", success ? "sent" : "failed")
+                .param("failureReason", failureReason)
+                .param("success", success)
+                .param("retryDelayMinutes", NOTIFICATION_RETRY_DELAY_MINUTES)
+                .param("id", stableUuid(notificationId))
+                .update();
+        transitionAlertEvent(current.eventId(), success ? "NOTIFY_SUCCESS" : "NOTIFY_FAILED", failureReason, currentUser);
+        return notificationRecords(currentUser, current.eventId()).stream()
+                .filter(record -> record.id().equals(notificationId))
+                .findFirst()
+                .orElseThrow(() -> new NotFoundException("Notification record not found"));
+    }
+
+    @Override
+    public List<OnCallGroup> onCallGroups(CurrentUser currentUser) {
+        requirePermission(currentUser, "alerts:read");
+        return jdbc.sql("""
+                SELECT ocg.id, ocg.code, ocg.name, bl.code AS business_line, ocg.status, ocg.created_at, ocg.updated_at,
+                       COALESCE(array_agg(ocgm.user_id::text ORDER BY ocgm.notify_priority) FILTER (WHERE ocgm.user_id IS NOT NULL), ARRAY[]::text[]) AS member_user_ids
+                FROM on_call_group ocg
+                LEFT JOIN business_line bl ON bl.id = ocg.business_line_id
+                LEFT JOIN on_call_group_member ocgm ON ocgm.group_id = ocg.id AND ocgm.status = 'active' AND ocgm.deleted_at IS NULL
+                WHERE ocg.deleted_at IS NULL
+                  AND (:platformAdmin OR bl.code = ANY(:businessLines))
+                GROUP BY ocg.id, ocg.code, ocg.name, bl.code, ocg.status, ocg.created_at, ocg.updated_at
+                ORDER BY ocg.code
+                """)
+                .param("platformAdmin", currentUser.dataScope().platformAdmin())
+                .param("businessLines", currentUser.dataScope().businessLines().toArray(String[]::new))
+                .query(this::onCallGroup)
+                .list();
+    }
+
+    @Override
     public List<LogEntry> searchLogs(CurrentUser currentUser, com.heimdallr.monitor.api.dto.LogSearchCriteria criteria) {
         Set<String> applicationIds = visibleApplications(currentUser).stream()
                 .map(ApplicationAsset::id)
                 .collect(Collectors.toSet());
         if (applicationIds.isEmpty()) {
             return List.of();
+        }
+        List<LogEntry> externalLogs = searchExternalLogs(currentUser, criteria);
+        if (!externalLogs.isEmpty()) {
+            return externalLogs;
         }
         return jdbc.sql("""
                 SELECT le.code, le.occurred_at, le.application_id::text, mo.code AS object_code, le.env, le.level,
@@ -683,6 +1231,259 @@ public class JdbcMonitorData extends InMemoryMonitorData {
         return requireUser(targetUserId);
     }
 
+    private ValidationProbe probeDataSource(DataSourceConfig source) {
+        if (source.baseUrl() == null || source.baseUrl().isBlank()) {
+            return new ValidationProbe(false, "CONFIG_INVALID", "Base URL is empty");
+        }
+        String path = Optional.ofNullable(source.healthCheckPath()).filter(item -> !item.isBlank()).orElse("/");
+        String url = source.baseUrl() + (path.startsWith("/") ? path : "/" + path);
+        if ("PROMETHEUS".equalsIgnoreCase(source.type()) && path.contains("/api/v1/query")) {
+            url = url + "?query=up";
+        }
+        try {
+            HttpResponse<String> response = sendGet(url, Math.max(source.timeoutSeconds(), 1));
+            if (response.statusCode() >= 200 && response.statusCode() < 300) {
+                return new ValidationProbe(true, null, "Connection test passed");
+            }
+            return new ValidationProbe(false, "HTTP_" + response.statusCode(), "HTTP " + response.statusCode());
+        } catch (RuntimeException ex) {
+            return new ValidationProbe(false, "CONNECT_FAILED", ex.getMessage());
+        }
+    }
+
+    private AgentInstance mergeAgentGatewayStatus(CurrentUser currentUser, AgentInstance agent) {
+        Optional<DataSourceConfig> gateway = visibleDataSources(currentUser).stream()
+                .filter(source -> "AGENT".equalsIgnoreCase(source.type()))
+                .findFirst();
+        if (gateway.isEmpty()) {
+            return agent;
+        }
+        try {
+            HttpResponse<String> response = sendGet(gateway.get().baseUrl() + "/status", Math.max(gateway.get().timeoutSeconds(), 1));
+            if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                return agent;
+            }
+            JsonNode root = objectMapper.readTree(response.body());
+            int online = root.path("agents").path("online").asInt(0);
+            String status = online > 0 ? "ONLINE" : "NO_HEARTBEAT";
+            return new AgentInstance(
+                    agent.id(),
+                    agent.serverId(),
+                    agent.hostname(),
+                    agent.environment(),
+                    agent.version(),
+                    status,
+                    OffsetDateTime.now(),
+                    agent.configVersion(),
+                    online > 0 ? null : "Agent gateway reports no online agents"
+            );
+        } catch (IOException | RuntimeException ex) {
+            return agent;
+        }
+    }
+
+    private List<MetricSeries.MetricSample> queryPrometheusSamples(
+            DataSourceConfig source,
+            String objectType,
+            String metricCode,
+            String objectId,
+            String defaultQueryTemplate,
+            OffsetDateTime from,
+            OffsetDateTime to
+    ) {
+        String query = defaultMetricMappings(objectType).stream()
+                .filter(mapping -> mapping.metricCode().equals(metricCode))
+                .map(DefaultMetricMapping::queryTemplate)
+                .findFirst()
+                .orElse(defaultQueryTemplate == null || defaultQueryTemplate.isBlank() ? "up" : defaultQueryTemplate);
+        query = query.replace("$object", objectId);
+        String url = source.baseUrl()
+                + "/api/v1/query_range?query=" + encode(query)
+                + "&start=" + from.toEpochSecond()
+                + "&end=" + to.toEpochSecond()
+                + "&step=60";
+        try {
+            HttpResponse<String> response = sendGet(url, Math.max(source.timeoutSeconds(), 1));
+            if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                return List.of();
+            }
+            JsonNode result = objectMapper.readTree(response.body()).path("data").path("result");
+            List<MetricSeries.MetricSample> samples = new ArrayList<>();
+            if (result.isArray()) {
+                for (JsonNode series : result) {
+                    JsonNode values = series.path("values");
+                    if (values.isArray()) {
+                        for (JsonNode value : values) {
+                            samples.add(metricSample(value));
+                        }
+                    } else if (series.path("value").isArray()) {
+                        samples.add(metricSample(series.path("value")));
+                    }
+                }
+            }
+            return samples.stream()
+                    .filter(sample -> sample.timestamp() != null)
+                    .sorted((left, right) -> left.timestamp().compareTo(right.timestamp()))
+                    .limit(200)
+                    .toList();
+        } catch (IOException | RuntimeException ex) {
+            return List.of();
+        }
+    }
+
+    private List<LogEntry> searchExternalLogs(CurrentUser currentUser, com.heimdallr.monitor.api.dto.LogSearchCriteria criteria) {
+        Optional<DataSourceConfig> elasticsearch = visibleDataSources(currentUser).stream()
+                .filter(source -> "ELASTICSEARCH".equalsIgnoreCase(source.type()) || "LOG".equalsIgnoreCase(source.type()) || "LOKI".equalsIgnoreCase(source.type()))
+                .findFirst();
+        if (elasticsearch.isEmpty() || !"ELASTICSEARCH".equalsIgnoreCase(elasticsearch.get().type())) {
+            return List.of();
+        }
+        List<ApplicationAsset> visibleApplications = visibleApplications(currentUser);
+        Set<String> visibleApplicationCodes = visibleApplications.stream()
+                .map(ApplicationAsset::code)
+                .collect(Collectors.toSet());
+        Map<String, String> applicationIdsByCode = visibleApplications.stream()
+                .collect(Collectors.toMap(ApplicationAsset::code, ApplicationAsset::id, (left, right) -> left));
+        try {
+            String body = elasticsearchQueryBody(criteria);
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(elasticsearch.get().baseUrl() + "/test-logs-*/_search"))
+                    .timeout(Duration.ofSeconds(Math.max(elasticsearch.get().timeoutSeconds(), 1)))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(body))
+                    .build();
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                return List.of();
+            }
+            JsonNode hits = objectMapper.readTree(response.body()).path("hits").path("hits");
+            List<LogEntry> entries = new ArrayList<>();
+            for (JsonNode hit : hits) {
+                JsonNode source = hit.path("_source");
+                String applicationCode = firstText(source, "application", "app", "service");
+                if (!visibleApplicationCodes.isEmpty() && applicationCode != null && !visibleApplicationCodes.contains(applicationCode)) {
+                    continue;
+                }
+                String level = text(source, "level");
+                String environment = firstText(source, "environment", "env");
+                String message = text(source, "message");
+                if (criteria.level() != null && level != null && !criteria.level().equalsIgnoreCase(level)) {
+                    continue;
+                }
+                if (criteria.environment() != null && environment != null && !criteria.environment().equalsIgnoreCase(environment)) {
+                    continue;
+                }
+                if (criteria.keyword() != null && (message == null || !message.toLowerCase().contains(criteria.keyword().toLowerCase()))) {
+                    continue;
+                }
+                entries.add(new LogEntry(
+                        hit.path("_id").asText(),
+                        parseTimestamp(firstText(source, "@timestamp", "timestamp")),
+                        applicationIdsByCode.getOrDefault(applicationCode, applicationCode),
+                        firstText(source, "objectId", "object", "instance"),
+                        environment,
+                        level,
+                        message,
+                        firstText(source, "traceId", "trace_id"),
+                        elasticsearch.get().id(),
+                        logLabels(source)
+                ));
+            }
+            return entries;
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            return List.of();
+        } catch (IOException | RuntimeException ex) {
+            return List.of();
+        }
+    }
+
+    private String elasticsearchQueryBody(com.heimdallr.monitor.api.dto.LogSearchCriteria criteria) throws IOException {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("size", criteria.normalizedPageSize());
+        List<Map<String, Object>> filters = new ArrayList<>();
+        if (criteria.traceId() != null && !criteria.traceId().isBlank()) {
+            filters.add(Map.of("term", Map.of("traceId.keyword", criteria.traceId())));
+        }
+        if (criteria.from() != null || criteria.to() != null) {
+            Map<String, String> range = new LinkedHashMap<>();
+            if (criteria.from() != null) {
+                range.put("gte", criteria.from().toString());
+            }
+            if (criteria.to() != null) {
+                range.put("lte", criteria.to().toString());
+            }
+            filters.add(Map.of("range", Map.of("@timestamp", range)));
+        }
+        body.put("query", filters.isEmpty() ? Map.of("match_all", Map.of()) : Map.of("bool", Map.of("filter", filters)));
+        body.put("sort", List.of(Map.of("@timestamp", Map.of("order", "desc"))));
+        return objectMapper.writeValueAsString(body);
+    }
+
+    private HttpResponse<String> sendGet(String url, int timeoutSeconds) {
+        try {
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(url))
+                    .timeout(Duration.ofSeconds(timeoutSeconds))
+                    .GET()
+                    .build();
+            return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException(ex.getMessage(), ex);
+        } catch (IOException ex) {
+            throw new IllegalStateException(ex.getMessage(), ex);
+        }
+    }
+
+    private MetricSeries.MetricSample metricSample(JsonNode value) {
+        if (!value.isArray() || value.size() < 2) {
+            return new MetricSeries.MetricSample(null, 0);
+        }
+        OffsetDateTime timestamp = OffsetDateTime.ofInstant(Instant.ofEpochSecond(value.get(0).asLong()), ZoneOffset.UTC);
+        return new MetricSeries.MetricSample(timestamp, Double.parseDouble(value.get(1).asText("0")));
+    }
+
+    private static String encode(String value) {
+        return URLEncoder.encode(value, StandardCharsets.UTF_8);
+    }
+
+    private static OffsetDateTime parseTimestamp(String value) {
+        if (value == null || value.isBlank()) {
+            return OffsetDateTime.now();
+        }
+        return OffsetDateTime.parse(value);
+    }
+
+    private static String firstText(JsonNode node, String... names) {
+        for (String name : names) {
+            String value = text(node, name);
+            if (value != null) {
+                return value;
+            }
+        }
+        return null;
+    }
+
+    private static String text(JsonNode node, String name) {
+        JsonNode value = node.path(name);
+        return value.isMissingNode() || value.isNull() ? null : value.asText();
+    }
+
+    private static Map<String, String> logLabels(JsonNode source) {
+        Map<String, String> labels = new LinkedHashMap<>();
+        for (String name : List.of("service", "application", "environment", "host", "instance")) {
+            String value = text(source, name);
+            if (value != null) {
+                labels.put(name, value);
+            }
+        }
+        return labels;
+    }
+
+    private record ValidationProbe(boolean passed, String errorCode, String message) {
+    }
+
     private ApplicationAsset applicationAsset(ResultSet rs, int rowNum) throws SQLException {
         return new ApplicationAsset(
                 rs.getString("id"),
@@ -745,6 +1546,127 @@ public class JdbcMonitorData extends InMemoryMonitorData {
                 rs.getObject("last_seen_at", OffsetDateTime.class),
                 rs.getString("access_status"),
                 rs.getString("failure_reason")
+        );
+    }
+
+    private AlertRule alertRule(ResultSet rs, int rowNum) throws SQLException {
+        return new AlertRule(
+                rs.getString("id"),
+                rs.getString("rule_name"),
+                rs.getString("object_id"),
+                rs.getString("object_name"),
+                rs.getString("metric_code"),
+                rs.getString("operator"),
+                rs.getDouble("threshold"),
+                rs.getInt("window_seconds"),
+                rs.getInt("duration_seconds"),
+                rs.getInt("evaluation_interval_seconds"),
+                rs.getString("severity"),
+                rs.getBoolean("enabled"),
+                rs.getString("business_line"),
+                rs.getString("app_id"),
+                rs.getString("on_call_group_id"),
+                rs.getObject("created_at", OffsetDateTime.class),
+                rs.getObject("updated_at", OffsetDateTime.class)
+        );
+    }
+
+    private AlertRuleRuntime alertRuleRuntime(ResultSet rs, int rowNum) throws SQLException {
+        java.math.BigDecimal lastValue = rs.getBigDecimal("last_value");
+        return new AlertRuleRuntime(
+                rs.getString("rule_id"),
+                rs.getObject("last_evaluated_at", OffsetDateTime.class),
+                rs.getObject("next_evaluate_at", OffsetDateTime.class),
+                rs.getString("last_status"),
+                lastValue == null ? null : lastValue.doubleValue(),
+                rs.getString("last_error"),
+                rs.getObject("evaluation_duration_ms", Long.class),
+                rs.getObject("updated_at", OffsetDateTime.class)
+        );
+    }
+
+    private AlertEvaluationSample alertEvaluationSample(ResultSet rs, int rowNum) throws SQLException {
+        java.math.BigDecimal value = rs.getBigDecimal("metric_value");
+        return new AlertEvaluationSample(
+                rs.getString("id"),
+                rs.getString("rule_id"),
+                rs.getObject("evaluated_at", OffsetDateTime.class),
+                rs.getString("status"),
+                value == null ? null : value.doubleValue(),
+                rs.getDouble("threshold"),
+                rs.getString("operator"),
+                rs.getBoolean("matched"),
+                rs.getString("event_id"),
+                rs.getString("error"),
+                rs.getObject("evaluation_duration_ms", Long.class),
+                rs.getObject("created_at", OffsetDateTime.class)
+        );
+    }
+
+    private AlertEvent alertEvent(ResultSet rs, int rowNum) throws SQLException {
+        return new AlertEvent(
+                rs.getString("id"),
+                rs.getString("rule_id"),
+                rs.getString("rule_name"),
+                rs.getString("object_id"),
+                rs.getString("object_name"),
+                rs.getString("metric_code"),
+                rs.getString("severity"),
+                rs.getString("status"),
+                rs.getDouble("trigger_value"),
+                rs.getDouble("threshold"),
+                rs.getString("operator"),
+                rs.getString("assignee_user_id"),
+                rs.getString("close_reason"),
+                rs.getObject("triggered_at", OffsetDateTime.class),
+                rs.getObject("notified_at", OffsetDateTime.class),
+                rs.getObject("acknowledged_at", OffsetDateTime.class),
+                rs.getObject("processing_at", OffsetDateTime.class),
+                rs.getObject("recovered_at", OffsetDateTime.class),
+                rs.getObject("closed_at", OffsetDateTime.class),
+                rs.getObject("updated_at", OffsetDateTime.class)
+        );
+    }
+
+    private AlertEventHistory alertEventHistory(ResultSet rs, int rowNum) throws SQLException {
+        return new AlertEventHistory(
+                rs.getString("id"),
+                rs.getString("event_id"),
+                rs.getString("from_status"),
+                rs.getString("to_status"),
+                rs.getString("action"),
+                rs.getString("operator_user_id"),
+                rs.getString("message"),
+                rs.getObject("operated_at", OffsetDateTime.class)
+        );
+    }
+
+    private NotificationRecord notificationRecord(ResultSet rs, int rowNum) throws SQLException {
+        return new NotificationRecord(
+                rs.getString("id"),
+                rs.getString("event_id"),
+                rs.getString("rule_id"),
+                rs.getString("channel_type"),
+                rs.getString("receiver"),
+                rs.getString("status"),
+                rs.getInt("retry_count"),
+                rs.getString("failure_reason"),
+                rs.getObject("next_retry_at", OffsetDateTime.class),
+                rs.getObject("sent_at", OffsetDateTime.class),
+                rs.getObject("created_at", OffsetDateTime.class)
+        );
+    }
+
+    private OnCallGroup onCallGroup(ResultSet rs, int rowNum) throws SQLException {
+        return new OnCallGroup(
+                rs.getString("id"),
+                rs.getString("code"),
+                rs.getString("name"),
+                rs.getString("business_line"),
+                List.of((String[]) rs.getArray("member_user_ids").getArray()),
+                rs.getString("status"),
+                rs.getObject("created_at", OffsetDateTime.class),
+                rs.getObject("updated_at", OffsetDateTime.class)
         );
     }
 
@@ -830,6 +1752,30 @@ public class JdbcMonitorData extends InMemoryMonitorData {
                 .optional();
     }
 
+    private Optional<UUID> businessLineIdByCode(String code) {
+        if (code == null || code.isBlank()) {
+            return Optional.empty();
+        }
+        return jdbc.sql("SELECT id FROM business_line WHERE code = :code AND deleted_at IS NULL")
+                .param("code", code)
+                .query(UUID.class)
+                .optional();
+    }
+
+    private Optional<UUID> onCallGroupId(String idOrCode) {
+        if (idOrCode == null || idOrCode.isBlank()) {
+            return Optional.empty();
+        }
+        Optional<UUID> parsed = parseUuid(idOrCode);
+        if (parsed.isPresent()) {
+            return parsed;
+        }
+        return jdbc.sql("SELECT id FROM on_call_group WHERE code = :code AND deleted_at IS NULL")
+                .param("code", idOrCode)
+                .query(UUID.class)
+                .optional();
+    }
+
     private UUID requireApplicationId(String applicationId) {
         UUID id = stableUuid(applicationId);
         boolean exists = jdbc.sql("SELECT EXISTS(SELECT 1 FROM application WHERE id = :id AND deleted_at IS NULL)")
@@ -840,6 +1786,14 @@ public class JdbcMonitorData extends InMemoryMonitorData {
             throw new NotFoundException("Application not found");
         }
         return id;
+    }
+
+    private boolean alertRuleExists(String ruleId) {
+        UUID id = stableUuid(ruleId);
+        return jdbc.sql("SELECT EXISTS(SELECT 1 FROM alert_rule WHERE id = :id AND deleted_at IS NULL)")
+                .param("id", id)
+                .query(Boolean.class)
+                .single();
     }
 
     private UUID requireUserId(String userId) {
@@ -943,8 +1897,39 @@ public class JdbcMonitorData extends InMemoryMonitorData {
                 .update();
     }
 
+    private void appendAlertHistory(UUID eventId, String fromStatus, String toStatus, String action, UUID operatorUserId, String message) {
+        jdbc.sql("""
+                INSERT INTO alert_event_history (event_id, from_status, to_status, action, operator_user_id, message)
+                VALUES (:eventId, :fromStatus, :toStatus, :action, :operatorUserId, :message)
+                """)
+                .param("eventId", eventId)
+                .param("fromStatus", fromStatus)
+                .param("toStatus", toStatus)
+                .param("action", action)
+                .param("operatorUserId", operatorUserId)
+                .param("message", message)
+                .update();
+    }
+
     private static String normalizeStatus(String status, String fallback) {
         return status == null || status.isBlank() ? fallback : status.toLowerCase();
+    }
+
+    private static void validateAlertTransition(String currentStatus, String action) {
+        String status = currentStatus == null ? "" : currentStatus.toUpperCase();
+        if (isTerminalAlertStatus(status)) {
+            throw new ApiException(ErrorCode.VALIDATION_FAILED, 400, "Alert event is already terminal");
+        }
+        if ("ACKNOWLEDGE".equals(action) && !Set.of("TRIGGERED", "NOTIFIED", "NOTIFICATION_FAILED").contains(status)) {
+            throw new ApiException(ErrorCode.VALIDATION_FAILED, 400, "Alert event cannot be acknowledged from current status");
+        }
+        if ("PROCESS".equals(action) && !Set.of("TRIGGERED", "NOTIFIED", "NOTIFICATION_FAILED", "ACKNOWLEDGED").contains(status)) {
+            throw new ApiException(ErrorCode.VALIDATION_FAILED, 400, "Alert event cannot be processed from current status");
+        }
+    }
+
+    private static boolean isTerminalAlertStatus(String status) {
+        return status != null && Set.of("RECOVERED", "CLOSED").contains(status.toUpperCase());
     }
 
     private static UUID stableUuid(String value) {

@@ -289,3 +289,113 @@ export interface LogSearchResult {
   aggregations: LogAggregation[];
   entries: LogEntry[];
 }
+
+export type AlertSeverity = 'P0' | 'P1' | 'P2' | 'P3';
+export type AlertEventStatus =
+  | 'TRIGGERED'
+  | 'NOTIFIED'
+  | 'NOTIFICATION_FAILED'
+  | 'ACKNOWLEDGED'
+  | 'PROCESSING'
+  | 'RECOVERED'
+  | 'CLOSED'
+  | 'triggered'
+  | 'notified'
+  | 'notification_failed'
+  | 'acknowledged'
+  | 'processing'
+  | 'recovered'
+  | 'closed';
+
+export interface AlertRule {
+  id: string;
+  name: string;
+  objectId: string;
+  objectName?: string;
+  metricCode: string;
+  operator: string;
+  threshold: number;
+  windowSeconds: number;
+  durationSeconds: number;
+  evaluationIntervalSeconds: number;
+  severity: AlertSeverity | string;
+  enabled: boolean;
+  businessLine?: string;
+  appId?: string;
+  onCallGroupId?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface AlertRulePayload {
+  name: string;
+  objectId: string;
+  metricCode: string;
+  operator: string;
+  threshold: number;
+  windowSeconds: number;
+  durationSeconds: number;
+  evaluationIntervalSeconds: number;
+  severity: AlertSeverity | string;
+  enabled: boolean;
+  onCallGroupId?: string;
+}
+
+export interface AlertEvent {
+  id: string;
+  ruleId: string;
+  ruleName: string;
+  objectId: string;
+  objectName?: string;
+  metricCode: string;
+  severity: AlertSeverity | string;
+  status: AlertEventStatus;
+  triggerValue: number;
+  threshold: number;
+  operator: string;
+  assigneeUserId?: string;
+  closeReason?: string;
+  triggeredAt?: string;
+  notifiedAt?: string;
+  acknowledgedAt?: string;
+  processingAt?: string;
+  recoveredAt?: string;
+  closedAt?: string;
+  updatedAt?: string;
+}
+
+export interface AlertEventHistory {
+  id: string;
+  eventId: string;
+  fromStatus?: AlertEventStatus | string;
+  toStatus: AlertEventStatus | string;
+  action: string;
+  operatorUserId?: string;
+  message?: string;
+  operatedAt: string;
+}
+
+export interface NotificationRecord {
+  id: string;
+  eventId: string;
+  ruleId: string;
+  channelType: string;
+  receiver: string;
+  status: string;
+  retryCount: number;
+  failureReason?: string;
+  nextRetryAt?: string;
+  sentAt?: string;
+  createdAt?: string;
+}
+
+export interface OnCallGroup {
+  id: string;
+  code: string;
+  name: string;
+  businessLine?: string;
+  memberUserIds: string[];
+  status: string;
+  createdAt?: string;
+  updatedAt?: string;
+}

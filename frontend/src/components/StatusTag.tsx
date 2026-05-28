@@ -51,6 +51,14 @@ const statusMap: Record<string, { label: string; color: string }> = {
   passed: { label: '通过', color: 'success' },
   PASSED: { label: '通过', color: 'success' },
   running: { label: '运行中', color: 'processing' },
+  TRIGGERED: { label: 'Triggered', color: 'error' },
+  NOTIFIED: { label: 'Notified', color: 'processing' },
+  NOTIFICATION_FAILED: { label: 'Notify failed', color: 'error' },
+  ACKNOWLEDGED: { label: 'Acknowledged', color: 'warning' },
+  PROCESSING: { label: 'Processing', color: 'processing' },
+  RECOVERED: { label: 'Recovered', color: 'success' },
+  CLOSED: { label: 'Closed', color: 'default' },
+  SENT: { label: 'Sent', color: 'success' },
 };
 
 export function StatusTag({ value }: { value: StatusValue }) {

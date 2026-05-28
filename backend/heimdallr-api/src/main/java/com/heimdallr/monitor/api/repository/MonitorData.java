@@ -2,6 +2,11 @@ package com.heimdallr.monitor.api.repository;
 
 import com.heimdallr.monitor.api.dto.LogSearchCriteria;
 import com.heimdallr.monitor.common.domain.model.AgentInstance;
+import com.heimdallr.monitor.common.domain.model.AlertEvent;
+import com.heimdallr.monitor.common.domain.model.AlertEventHistory;
+import com.heimdallr.monitor.common.domain.model.AlertEvaluationSample;
+import com.heimdallr.monitor.common.domain.model.AlertRule;
+import com.heimdallr.monitor.common.domain.model.AlertRuleRuntime;
 import com.heimdallr.monitor.common.domain.model.ApplicationAsset;
 import com.heimdallr.monitor.common.domain.model.ApplicationInstance;
 import com.heimdallr.monitor.common.domain.model.AuditEvent;
@@ -13,6 +18,8 @@ import com.heimdallr.monitor.common.domain.model.LogEntry;
 import com.heimdallr.monitor.common.domain.model.MetricDefinition;
 import com.heimdallr.monitor.common.domain.model.MetricSeries;
 import com.heimdallr.monitor.common.domain.model.MonitorObject;
+import com.heimdallr.monitor.common.domain.model.NotificationRecord;
+import com.heimdallr.monitor.common.domain.model.OnCallGroup;
 import com.heimdallr.monitor.common.domain.model.RoleInfo;
 import com.heimdallr.monitor.common.domain.model.ServerAsset;
 import com.heimdallr.monitor.common.domain.model.UserInfo;
@@ -60,6 +67,42 @@ public interface MonitorData {
     List<DefaultMetricMapping> defaultMetricMappings(String objectType);
 
     MetricSeries queryMetric(CurrentUser currentUser, String metricCode, String objectId, OffsetDateTime from, OffsetDateTime to);
+
+    List<AlertRule> alertRules(CurrentUser currentUser);
+
+    List<AlertRule> dueAlertRules(CurrentUser currentUser, OffsetDateTime now, int limit);
+
+    AlertRule requireAlertRule(String ruleId, CurrentUser currentUser);
+
+    AlertRule saveAlertRule(AlertRule rule, CurrentUser currentUser);
+
+    AlertRule setAlertRuleEnabled(String ruleId, boolean enabled, CurrentUser currentUser);
+
+    AlertRuleRuntime alertRuleRuntime(String ruleId, CurrentUser currentUser);
+
+    List<AlertEvaluationSample> alertEvaluationSamples(String ruleId, CurrentUser currentUser);
+
+    AlertRuleRuntime recordAlertEvaluation(AlertRule rule, String status, Double value, boolean matched, String eventId, String error, long evaluationDurationMs, CurrentUser currentUser);
+
+    List<AlertEvent> alertEvents(CurrentUser currentUser, String status);
+
+    AlertEvent upsertTriggeredAlert(AlertRule rule, double triggerValue, CurrentUser currentUser);
+
+    AlertEvent recoverActiveAlert(AlertRule rule, double latestValue, CurrentUser currentUser);
+
+    AlertEvent transitionAlertEvent(String eventId, String action, String message, CurrentUser currentUser);
+
+    List<AlertEventHistory> alertEventHistory(String eventId, CurrentUser currentUser);
+
+    List<NotificationRecord> notificationRecords(CurrentUser currentUser, String eventId);
+
+    NotificationRecord recordNotification(String eventId, String ruleId, String receiver, boolean success, String failureReason, CurrentUser currentUser);
+
+    List<NotificationRecord> dueNotificationRetries(CurrentUser currentUser, OffsetDateTime now, int limit);
+
+    NotificationRecord recordNotificationRetry(String notificationId, boolean success, String failureReason, CurrentUser currentUser);
+
+    List<OnCallGroup> onCallGroups(CurrentUser currentUser);
 
     List<LogEntry> searchLogs(CurrentUser currentUser, LogSearchCriteria criteria);
 

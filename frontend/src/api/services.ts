@@ -1,6 +1,9 @@
 import { apiRequest, isMockFallbackEnabled, withMockFallback } from './client';
 import { ApiError } from './errors';
 import {
+  mockAlertEventHistory,
+  mockAlertEvents,
+  mockAlertRules,
   mockAgents,
   mockApplicationAccess,
   mockApplicationDetails,
@@ -13,6 +16,8 @@ import {
   mockLogSearchResult,
   mockMetricDefinitions,
   mockMetricQueryResult,
+  mockNotificationRecords,
+  mockOnCallGroups,
   mockRoles,
   mockServers,
   mockUsers,
@@ -20,6 +25,10 @@ import {
 } from '../mocks/data';
 import type {
   AgentInstance,
+  AlertEvent,
+  AlertEventHistory,
+  AlertRule,
+  AlertRulePayload,
   Application,
   ApplicationAccess,
   ApplicationAccessGrantPayload,
@@ -34,6 +43,8 @@ import type {
   LogSearchResult,
   MetricDefinition,
   MetricQueryResult,
+  NotificationRecord,
+  OnCallGroup,
   PageResult,
   Role,
   Server,
@@ -136,6 +147,12 @@ interface BackendLogEntry {
   traceId?: string;
   labels: Record<string, string>;
 }
+
+type BackendAlertRule = AlertRule;
+type BackendAlertEvent = AlertEvent;
+type BackendAlertEventHistory = AlertEventHistory;
+type BackendNotificationRecord = NotificationRecord;
+type BackendOnCallGroup = OnCallGroup;
 
 function firstValue(value: string | undefined, fallback: string) {
   return value?.split(',').find(Boolean) ?? fallback;
@@ -411,6 +428,121 @@ function auditMockAccess(payload: ApplicationAccessGrantPayload) {
   return mockUsers.find((user) => user.id === payload.userId) ?? mockUsers[0];
 }
 
+function touchAlertRule(rule: AlertRule): AlertRule {
+  return { ...rule, updatedAt: nowText() };
+}
+
+function upsertMockAlertRule(payload: AlertRulePayload, id?: string): AlertRule {
+  const existingIndex = id ? mockAlertRules.findIndex((item) => item.id === id) : -1;
+  const rule: AlertRule = touchAlertRule({
+    ...(existingIndex >= 0 ? mockAlertRules[existingIndex] : { id: `alert-rule-${Date.now()}`, createdAt: nowText() }),
+    ...payload,
+    objectName: payload.objectId,
+  });
+  if (existingIndex >= 0) {
+    mockAlertRules.splice(existingIndex, 1, rule);
+  } else {
+    mockAlertRules.unshift(rule);
+  }
+  addAuditEvent(existingIndex >= 0 ? 'ALERT_RULE_UPDATE' : 'ALERT_RULE_CREATE', 'alert_rule', rule.name);
+  return rule;
+}
+
+function setMockAlertRuleEnabled(ruleId: string, enabled: boolean): AlertRule {
+  const index = mockAlertRules.findIndex((item) => item.id === ruleId);
+  const rule = touchAlertRule({ ...(mockAlertRules[index] ?? mockAlertRules[0]), enabled });
+  if (index >= 0) {
+    mockAlertRules.splice(index, 1, rule);
+  }
+  addAuditEvent(enabled ? 'ALERT_RULE_ENABLE' : 'ALERT_RULE_DISABLE', 'alert_rule', rule.name);
+  return rule;
+}
+
+function matchesAlertKeyword(values: Array<string | undefined>, keyword?: string) {
+  if (!keyword) {
+    return true;
+  }
+  const normalizedKeyword = keyword.trim().toLowerCase();
+  if (!normalizedKeyword) {
+    return true;
+  }
+  return values.some((value) => value?.toLowerCase().includes(normalizedKeyword));
+}
+
+function filterMockAlertRules(query?: Record<string, string | undefined>) {
+  return mockAlertRules.filter((rule) => {
+    const severityMatches = !query?.severity || String(rule.severity).toLowerCase() === query.severity.toLowerCase();
+    const enabledMatches = !query?.enabled || String(rule.enabled) === query.enabled;
+    const keywordMatches = matchesAlertKeyword([rule.name, rule.objectId, rule.objectName, rule.metricCode], query?.keyword);
+    return severityMatches && enabledMatches && keywordMatches;
+  });
+}
+
+function filterMockAlertEvents(query?: Record<string, string | undefined>) {
+  return mockAlertEvents.filter((event) => {
+    const statusMatches = !query?.status || String(event.status).toLowerCase() === query.status.toLowerCase();
+    const severityMatches = !query?.severity || String(event.severity).toLowerCase() === query.severity.toLowerCase();
+    const keywordMatches = matchesAlertKeyword([event.ruleName, event.objectId, event.objectName, event.metricCode], query?.keyword);
+    return statusMatches && severityMatches && keywordMatches;
+  });
+}
+
+function evaluateMockAlertRule(ruleId: string): AlertEvent {
+  const rule = mockAlertRules.find((item) => item.id === ruleId) ?? mockAlertRules[0];
+  const activeEvent = mockAlertEvents.find((item) => item.ruleId === rule.id && !['CLOSED', 'RECOVERED', 'closed', 'recovered'].includes(item.status));
+  if (activeEvent) {
+    return activeEvent;
+  }
+  const event: AlertEvent = {
+    id: `alert-event-${Date.now()}`,
+    ruleId: rule.id,
+    ruleName: rule.name,
+    objectId: rule.objectId,
+    objectName: rule.objectName,
+    metricCode: rule.metricCode,
+    severity: rule.severity,
+    status: 'NOTIFIED',
+    triggerValue: rule.threshold + 1,
+    threshold: rule.threshold,
+    operator: rule.operator,
+    triggeredAt: nowText(),
+    notifiedAt: nowText(),
+    updatedAt: nowText(),
+  };
+  mockAlertEvents.unshift(event);
+  mockAlertEventHistory.unshift({ id: `alert-history-${Date.now()}`, eventId: event.id, toStatus: 'TRIGGERED', action: 'TRIGGER', operatorUserId: 'system', message: 'Threshold condition matched', operatedAt: nowText() });
+  mockNotificationRecords.unshift({ id: `notification-${Date.now()}`, eventId: event.id, ruleId: rule.id, channelType: 'EMAIL', receiver: rule.onCallGroupId ?? 'u-admin', status: 'SENT', retryCount: 0, sentAt: nowText(), createdAt: nowText() });
+  addAuditEvent('ALERT_EVENT_TRIGGER', 'alert_event', event.id);
+  return event;
+}
+
+function transitionMockAlertEvent(eventId: string, action: string, message?: string): AlertEvent {
+  const index = mockAlertEvents.findIndex((item) => item.id === eventId);
+  const event = mockAlertEvents[index] ?? mockAlertEvents[0];
+  const status = action === 'ACKNOWLEDGE' ? 'ACKNOWLEDGED'
+    : action === 'PROCESS' ? 'PROCESSING'
+      : action === 'RECOVER' ? 'RECOVERED'
+        : action === 'CLOSE' ? 'CLOSED'
+          : event.status;
+  const updated: AlertEvent = {
+    ...event,
+    status,
+    assigneeUserId: ['ACKNOWLEDGE', 'PROCESS'].includes(action) ? mockCurrentUser.id : event.assigneeUserId,
+    closeReason: action === 'CLOSE' ? message : event.closeReason,
+    acknowledgedAt: action === 'ACKNOWLEDGE' ? nowText() : event.acknowledgedAt,
+    processingAt: action === 'PROCESS' ? nowText() : event.processingAt,
+    recoveredAt: action === 'RECOVER' ? nowText() : event.recoveredAt,
+    closedAt: action === 'CLOSE' ? nowText() : event.closedAt,
+    updatedAt: nowText(),
+  };
+  if (index >= 0) {
+    mockAlertEvents.splice(index, 1, updated);
+  }
+  mockAlertEventHistory.unshift({ id: `alert-history-${Date.now()}`, eventId, fromStatus: event.status, toStatus: status, action, operatorUserId: mockCurrentUser.id, message, operatedAt: nowText() });
+  addAuditEvent(`ALERT_EVENT_${action}`, 'alert_event', eventId);
+  return updated;
+}
+
 export const accessApi = {
   me: () => withMockFallback(apiRequest<BackendCurrentUser>('/api/v1/me').then(toCurrentUser), mockCurrentUser),
   dataScope: () => withMockFallback(apiRequest<BackendDataScope>('/api/v1/me/data-scope').then(toDataScope), mockDataScope),
@@ -509,4 +641,31 @@ export const observabilityApi = {
       }).then(toLogSearchResult),
       mockLogSearchResult,
     ),
+};
+
+export const alertsApi = {
+  rules: (query?: Record<string, string | undefined>) =>
+    withMockFallback(apiRequest<PageResult<BackendAlertRule>>('/api/v1/alerts/rules', { query }), toPage(filterMockAlertRules(query))),
+  createRule: (payload: AlertRulePayload) =>
+    withMockMutationFallback(apiRequest<BackendAlertRule>('/api/v1/alerts/rules', { method: 'POST', body: payload }), () => upsertMockAlertRule(payload)),
+  updateRule: (ruleId: string, payload: AlertRulePayload) =>
+    withMockMutationFallback(apiRequest<BackendAlertRule>(`/api/v1/alerts/rules/${ruleId}`, { method: 'PUT', body: payload }), () => upsertMockAlertRule(payload, ruleId)),
+  enableRule: (ruleId: string) =>
+    withMockMutationFallback(apiRequest<BackendAlertRule>(`/api/v1/alerts/rules/${ruleId}/enable`, { method: 'POST' }), () => setMockAlertRuleEnabled(ruleId, true)),
+  disableRule: (ruleId: string) =>
+    withMockMutationFallback(apiRequest<BackendAlertRule>(`/api/v1/alerts/rules/${ruleId}/disable`, { method: 'POST' }), () => setMockAlertRuleEnabled(ruleId, false)),
+  evaluateRule: (ruleId: string) =>
+    withMockMutationFallback(apiRequest<BackendAlertEvent>(`/api/v1/alerts/rules/${ruleId}/evaluate`, { method: 'POST' }), () => evaluateMockAlertRule(ruleId)),
+  evaluateEnabledRules: () =>
+    withMockMutationFallback(apiRequest<PageResult<BackendAlertEvent>>('/api/v1/alerts/rules/evaluate', { method: 'POST' }), () => toPage(mockAlertRules.filter((rule) => rule.enabled).map((rule) => evaluateMockAlertRule(rule.id)))),
+  events: (query?: Record<string, string | undefined>) =>
+    withMockFallback(apiRequest<PageResult<BackendAlertEvent>>('/api/v1/alerts/events', { query }), toPage(filterMockAlertEvents(query))),
+  transitionEvent: (eventId: string, action: string, message?: string) =>
+    withMockMutationFallback(apiRequest<BackendAlertEvent>(`/api/v1/alerts/events/${eventId}/actions`, { method: 'POST', body: { action, message } }), () => transitionMockAlertEvent(eventId, action, message)),
+  eventHistory: (eventId: string) =>
+    withMockFallback(apiRequest<PageResult<BackendAlertEventHistory>>(`/api/v1/alerts/events/${eventId}/history`), toPage(mockAlertEventHistory.filter((item) => item.eventId === eventId))),
+  notifications: (eventId?: string) =>
+    withMockFallback(apiRequest<PageResult<BackendNotificationRecord>>('/api/v1/alerts/notifications', { query: { eventId } }), toPage(mockNotificationRecords.filter((item) => !eventId || item.eventId === eventId))),
+  onCallGroups: () =>
+    withMockFallback(apiRequest<PageResult<BackendOnCallGroup>>('/api/v1/alerts/on-call-groups'), toPage(mockOnCallGroups)),
 };

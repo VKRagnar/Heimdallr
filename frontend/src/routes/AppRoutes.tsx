@@ -4,6 +4,7 @@ import { getAuthToken } from '../api/client';
 import { PermissionGate } from '../components/PermissionGate';
 import { AppShell } from '../layouts/AppShell';
 import { AgentsPage } from '../pages/AgentsPage';
+import { AlertsPage } from '../pages/AlertsPage';
 import { ApplicationDetailPage } from '../pages/ApplicationDetailPage';
 import { ApplicationAccessPage } from '../pages/ApplicationAccessPage';
 import { ApplicationsPage } from '../pages/ApplicationsPage';
@@ -48,6 +49,14 @@ export function AppRoutes() {
           element={
             <PermissionGate permission="metrics:read">
               <MetricsPage />
+            </PermissionGate>
+          }
+        />
+        <Route
+          path="/alerts"
+          element={
+            <PermissionGate permission="alerts:read">
+              <AlertsPage />
             </PermissionGate>
           }
         />

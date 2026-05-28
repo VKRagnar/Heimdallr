@@ -1,5 +1,8 @@
 import type {
   AgentInstance,
+  AlertEvent,
+  AlertEventHistory,
+  AlertRule,
   Application,
   ApplicationAccess,
   ApplicationDetail,
@@ -11,6 +14,8 @@ import type {
   LogSearchResult,
   MetricDefinition,
   MetricQueryResult,
+  NotificationRecord,
+  OnCallGroup,
   PageResult,
   Role,
   Server,
@@ -24,7 +29,7 @@ export const mockCurrentUser: CurrentUser = {
   email: 'admin@example.com',
   roles: ['平台管理员'],
   permissions: ['*'],
-  menus: ['home', 'applications', 'servers', 'logs', 'metrics', 'access.data-sources', 'access.applications', 'access.agents', 'system.users', 'system.roles', 'system.audit-events'],
+  menus: ['home', 'applications', 'servers', 'logs', 'metrics', 'alerts', 'access.data-sources', 'access.applications', 'access.agents', 'system.users', 'system.roles', 'system.audit-events'],
 };
 
 export const mockDataScope: DataScope = {
@@ -160,6 +165,80 @@ export const mockLogSearchResult: LogSearchResult = {
     { id: 'log-003', timestamp: '2026-04-28 09:54:34', level: 'WARN', application: 'ACE 交易中心', environment: 'prod', instanceIp: '10.12.8.21', traceId: 'trace-a1', thread: 'pool-7', interfacePath: '/api/pay', summary: 'Retrying PostgreSQL transaction, sql=select *** from order_payment', masked: true },
   ],
 };
+
+export const mockOnCallGroups: OnCallGroup[] = [
+  { id: 'trade-oncall', code: 'trade-oncall', name: 'Trade On-call', businessLine: 'trade', memberUserIds: ['u-ace-owner', 'u-sre'], status: 'ACTIVE', createdAt: '2026-05-10 09:00:00', updatedAt: '2026-05-10 09:00:00' },
+  { id: 'sre-oncall', code: 'sre-oncall', name: 'SRE On-call', businessLine: 'core-platform', memberUserIds: ['u-sre'], status: 'ACTIVE', createdAt: '2026-05-10 09:00:00', updatedAt: '2026-05-10 09:00:00' },
+];
+
+export const mockAlertRules: AlertRule[] = [
+  {
+    id: 'alert-rule-kafka-lag',
+    name: 'Kafka lag smoke',
+    objectId: 'obj-kafka-orders',
+    objectName: 'orders-kafka',
+    metricCode: 'mq_lag',
+    operator: '>',
+    threshold: 1000,
+    windowSeconds: 300,
+    durationSeconds: 60,
+    evaluationIntervalSeconds: 60,
+    severity: 'P1',
+    enabled: true,
+    businessLine: 'trade',
+    appId: 'app-ace',
+    onCallGroupId: 'trade-oncall',
+    createdAt: '2026-05-10 09:10:00',
+    updatedAt: '2026-05-10 09:10:00',
+  },
+  {
+    id: 'alert-rule-pg-conn',
+    name: 'PostgreSQL connection usage',
+    objectId: 'obj-pg-ace',
+    objectName: 'ace-postgresql',
+    metricCode: 'db_conn_usage',
+    operator: '>',
+    threshold: 80,
+    windowSeconds: 300,
+    durationSeconds: 120,
+    evaluationIntervalSeconds: 60,
+    severity: 'P2',
+    enabled: false,
+    businessLine: 'trade',
+    appId: 'app-ace',
+    onCallGroupId: 'trade-oncall',
+    createdAt: '2026-05-10 09:12:00',
+    updatedAt: '2026-05-10 09:12:00',
+  },
+];
+
+export const mockAlertEvents: AlertEvent[] = [
+  {
+    id: 'alert-event-kafka-lag',
+    ruleId: 'alert-rule-kafka-lag',
+    ruleName: 'Kafka lag smoke',
+    objectId: 'obj-kafka-orders',
+    objectName: 'orders-kafka',
+    metricCode: 'mq_lag',
+    severity: 'P1',
+    status: 'NOTIFIED',
+    triggerValue: 1340,
+    threshold: 1000,
+    operator: '>',
+    triggeredAt: '2026-05-10 09:20:00',
+    notifiedAt: '2026-05-10 09:20:03',
+    updatedAt: '2026-05-10 09:20:03',
+  },
+];
+
+export const mockAlertEventHistory: AlertEventHistory[] = [
+  { id: 'alert-history-001', eventId: 'alert-event-kafka-lag', toStatus: 'TRIGGERED', action: 'TRIGGER', operatorUserId: 'system', message: 'Threshold condition matched', operatedAt: '2026-05-10 09:20:00' },
+  { id: 'alert-history-002', eventId: 'alert-event-kafka-lag', fromStatus: 'TRIGGERED', toStatus: 'NOTIFIED', action: 'NOTIFY_SUCCESS', operatorUserId: 'system', message: 'Mock email sent', operatedAt: '2026-05-10 09:20:03' },
+];
+
+export const mockNotificationRecords: NotificationRecord[] = [
+  { id: 'notification-001', eventId: 'alert-event-kafka-lag', ruleId: 'alert-rule-kafka-lag', channelType: 'EMAIL', receiver: 'u-ace-owner', status: 'SENT', retryCount: 0, sentAt: '2026-05-10 09:20:03', createdAt: '2026-05-10 09:20:03' },
+];
 
 export function toPage<T>(items: T[], page = 1, pageSize = 20): PageResult<T> {
   return {

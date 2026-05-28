@@ -4,6 +4,7 @@ frontend/dist/
 frontend/.vite/
 frontend/node_modules/.tmp/
 
+.vscode
 *.log
 .env
 .env.*
